@@ -53,6 +53,18 @@ public struct Session: Codable, Equatable {
         case updatedAt = "updated_at"
     }
 
+    public init(sessionId: String, name: String, cwd: String, pid: Int,
+                state: SessionState, createdAt: Date, updatedAt: Date, term: TermInfo?) {
+        self.sessionId = sessionId
+        self.name = name
+        self.cwd = cwd
+        self.pid = pid
+        self.state = state
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+        self.term = term
+    }
+
     /// Decoder configured for the hook's `2026-07-08T14:22:31Z` timestamps.
     public static func decoder() -> JSONDecoder {
         let d = JSONDecoder()

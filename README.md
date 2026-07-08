@@ -99,7 +99,8 @@ where those entry points are unavailable.
 ```sh
 cd app
 swift build -c release       # needs a working Swift toolchain (see caveat)
-swift test                   # runs the TbledCore logic unit tests
+swift run tbled-selftest     # verify the TbledCore logic (works under CLT-only)
+swift test                   # full XCTest suite (needs Xcode for XCTest)
 ```
 
 Auto-start via `packaging/com.tbled.app.plist` (a LaunchAgent template).
@@ -126,25 +127,25 @@ don't:
   headless Claude Code session** confirmed the two things simulation can't: the
   installed (argv-less) hook receives the event via **stdin** and writes the
   correct state, and the recorded PID is the **durable Claude Code process**
-  (so `kill -0` liveness is reliable, not a transient shell). The one path not
-  exercised on real hardware — the working/waiting *colour* transitions during
-  an authenticated turn — was blocked only by Keychain auth isolation of the
-  throwaway config dir, and runs through the byte-identical code path already
-  proven. Requires **bash 3.2+** and `jq` (both stock on macOS).
+  (so `kill -0` liveness is reliable, not a transient shell). The working/waiting
+  *colour* transitions were later confirmed **live**, against a real interactive
+  session running with the hooks installed. Requires **bash 3.2+** and `jq`
+  (both stock on macOS).
 
 - **MTMR widget — verified logic, needs your Touch Bar to see.** The renderer
   was tested against fixture state (colours, truncation, empty `💤` case). The
   actual Touch Bar display depends on your MTMR install.
 
-- **Native app — written to recipe, _not_ runtime-verified.** `TbledCore` (the
-  parsing / stale / PID / dedup logic) has unit tests; the ObjC shim passes a
-  clang syntax check. But the app could **not be compiled or run in the build
-  environment**: that machine's Command Line Tools Swift toolchain is internally
-  broken (`import Foundation` fails — SDK/compiler version mismatch), with no
-  Xcode available. Build it with a healthy toolchain (full Xcode, or a repaired
-  CLT) before relying on it. The private-API Touch Bar path in particular is
-  faithful to Pock/MTMR but unverified on this macOS version — the menu-bar
-  mirror is the guaranteed-working fallback.
+- **Native app — compiles and its logic is tested; Touch Bar rendering not yet
+  verified.** The whole package **builds cleanly** (`swift build` → a linked
+  `tbled-touchbar` binary; the ObjC DFR shim compiles and links). `TbledCore`
+  (parsing / stale / PID / dedup — the bug-prone part) passes **12/12 checks**
+  via `swift run tbled-selftest`, an XCTest-free runner that works under Command
+  Line Tools alone. (The XCTest suite in `Tests/` needs full Xcode.) What is
+  *not* yet verified is the actual on-screen rendering: the menu-bar mirror and
+  the private-API Touch Bar path have not been observed running on this macOS
+  version — the private entry points are faithful to Pock/MTMR and guarded to
+  degrade to no-ops, with the menu-bar mirror as the fallback.
 
 ## Layout
 

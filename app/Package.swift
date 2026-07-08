@@ -11,7 +11,10 @@ import PackageDescription
 //   tbled-touchbar  — the AppKit executable (menu-bar item + Touch Bar tiles).
 //
 // Requires a working Swift toolchain (full Xcode, or a repaired Command Line
-// Tools install). Build:  swift build -c release   Test:  swift test
+// Tools install).
+//   Build:      swift build -c release
+//   Test:       swift test              (needs full Xcode — XCTest)
+//   Self-test:  swift run tbled-selftest (runs the same checks under CLT-only)
 let package = Package(
     name: "tbled",
     platforms: [.macOS(.v11)],
@@ -21,6 +24,11 @@ let package = Package(
         .executableTarget(
             name: "tbled-touchbar",
             dependencies: ["CDFR", "TbledCore"]
+        ),
+        // XCTest-free runner so the logic can be verified without Xcode.
+        .executableTarget(
+            name: "tbled-selftest",
+            dependencies: ["TbledCore"]
         ),
         .testTarget(
             name: "TbledCoreTests",
