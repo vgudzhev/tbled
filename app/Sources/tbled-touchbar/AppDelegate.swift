@@ -16,8 +16,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         store.onChange = { [weak self] rendered in
             self?.menuBar.update(rendered)
             self?.touchBar.update(rendered)
+            if ProcessInfo.processInfo.environment["TBLED_DIAG"] != nil {
+                FileHandle.standardError.write(
+                    "diag: rendered \(rendered.count) session(s): "
+                    .appending(rendered.map { "\($0.label)=\($0.display.rawValue)" }.joined(separator: ", "))
+                    .appending("\n").data(using: .utf8)!)
+            }
         }
         store.start()
+
+        if ProcessInfo.processInfo.environment["TBLED_DIAG"] != nil {
+            let msg = "diag: launched. menuBarButton=\(menuBar.hasStatusButton) "
+                + "touchBarDFR=\(touchBar.available)\n"
+            FileHandle.standardError.write(msg.data(using: .utf8)!)
+        }
 
         // Re-assert control-strip presence after wake / display changes — the
         // DFR handle goes stale otherwise (cled hits the same issue for OpenRGB).

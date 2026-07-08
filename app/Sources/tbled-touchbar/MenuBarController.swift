@@ -16,6 +16,9 @@ final class MenuBarController: NSObject {
         rebuild()
     }
 
+    /// True once the system has granted the status bar slot (button exists).
+    var hasStatusButton: Bool { statusItem.button != nil }
+
     func update(_ sessions: [RenderedSession]) {
         self.sessions = sessions
         rebuild()
