@@ -1,0 +1,297 @@
+#!/usr/bin/env bash
+#
+# tbled — CLI for the Touch Bar Claude Code status app.
+#
+#   tbled status                 pretty-print the live sessions
+#   tbled install [--config-dir DIR]...   wire hooks into settings.json
+#   tbled uninstall [--config-dir DIR]... remove them again
+#   tbled reap                   delete session files for dead/expired sessions
+#   tbled dir                    print the state directory
+#
+# The install/uninstall commands back up settings.json first and are
+# idempotent (safe to re-run). By default they target $CLAUDE_CONFIG_DIR,
+# falling back to ~/.claude; pass --config-dir one or more times to target
+# others (e.g. ~/.claude-personal, ~/.claude-work).
+
+set -euo pipefail
+
+TBLED_DIR="${TBLED_DIR:-$HOME/.tbled}"
+SESSIONS_DIR="$TBLED_DIR/sessions"
+BIN_DIR="$TBLED_DIR/bin"
+
+# Stale / hide thresholds (seconds). Overridable via env for tests.
+STALE_SECS="${TBLED_STALE_SECS:-1200}"   # 20 min → dim
+HIDE_SECS="${TBLED_HIDE_SECS:-7200}"     # 2 h   → hide/reap
+
+# Hook events we register. Order is cosmetic.
+EVENTS='["SessionStart","UserPromptSubmit","PreToolUse","PostToolUse","PostToolBatch","PostToolUseFailure","Notification","Stop","SessionEnd"]'
+
+c_red=$'\033[31m'; c_yellow=$'\033[33m'; c_green=$'\033[32m'
+c_dim=$'\033[2m';  c_bold=$'\033[1m';   c_reset=$'\033[0m'
+
+die() { printf 'tbled: %s\n' "$*" >&2; exit 1; }
+
+now_epoch() { date -u +%s; }
+
+# Convert an ISO-8601 Z timestamp to epoch seconds (BSD date).
+iso_to_epoch() {
+  date -u -j -f '%Y-%m-%dT%H:%M:%SZ' "$1" +%s 2>/dev/null || echo 0
+}
+
+pid_alive() { [ "$1" -gt 0 ] 2>/dev/null && kill -0 "$1" 2>/dev/null; }
+
+# ---- status ---------------------------------------------------------------
+
+cmd_status() {
+  if [ ! -d "$SESSIONS_DIR" ] || ! compgen -G "$SESSIONS_DIR/*.json" >/dev/null 2>&1; then
+    printf '%sno active sessions%s\n' "$c_dim" "$c_reset"
+    return 0
+  fi
+
+  local now; now="$(now_epoch)"
+
+  # Gather rows as: created_epoch \t name \t state \t age \t pid \t cwd
+  local rows=""
+  local f
+  for f in "$SESSIONS_DIR"/*.json; do
+    [ -e "$f" ] || continue
+    case "$(basename "$f")" in .tmp.*) continue;; esac
+    local rec
+    rec="$(jq -r '[.name, .state, (.updated_at // ""), (.created_at // ""), (.pid // 0), (.cwd // "")] | @tsv' "$f" 2>/dev/null)" || continue
+    [ -n "$rec" ] || continue
+    IFS=$'\t' read -r name state updated created pid cwd <<<"$rec"
+    local upd; upd="$(iso_to_epoch "$updated")"
+    local crt; crt="$(iso_to_epoch "$created")"
+    local age=$(( now - upd ))
+    (( age < 0 )) && age=0
+    rows+="${crt}"$'\t'"${name}"$'\t'"${state}"$'\t'"${age}"$'\t'"${pid}"$'\t'"${cwd}"$'\n'
+  done
+
+  [ -n "$rows" ] || { printf '%sno active sessions%s\n' "$c_dim" "$c_reset"; return 0; }
+
+  # Resolve each row to a display state (accounting for PID liveness and stale
+  # thresholds), emitting: created \t name \t dispstate \t agehuman.
+  # Done in bash because it needs kill -0; dedup/coloring happens in awk after.
+  local resolved=""
+  local crt name state age pid cwd disp
+  while IFS=$'\t' read -r crt name state age pid cwd; do
+    [ -n "$name" ] || continue
+    if ! pid_alive "$pid"; then
+      disp="dead"
+    elif (( age > HIDE_SECS )); then
+      disp="expired"
+    elif (( age > STALE_SECS )); then
+      disp="stale"
+    else
+      disp="$state"
+    fi
+    resolved+="${crt}"$'\t'"${name}"$'\t'"${disp}"$'\t'"$(human_age "$age")"$'\n'
+  done <<<"$rows"
+
+  # Deterministic order by created time (stable tile ordering), then dedup
+  # duplicate names (webapp, webapp·2, …) and colorize. bash 3.2 has no
+  # associative arrays, so awk (two passes over the same data) does the work.
+  local sorted; sorted="$(printf '%s' "$resolved" | sort -t$'\t' -k1,1n)"
+  awk -F'\t' \
+    -v red="$c_red" -v yellow="$c_yellow" -v green="$c_green" \
+    -v dim="$c_dim" -v bold="$c_bold" -v reset="$c_reset" -v mid="·" '
+    NR==FNR { cnt[$2]++; next }
+    {
+      seen[$2]++
+      label = $2
+      if (cnt[$2] > 1) label = $2 mid seen[$2]
+      disp = $3
+      if      (disp == "working") { color = red;    glyph = "\xe2\x97\x8f" }
+      else if (disp == "waiting") { color = yellow; glyph = "\xe2\x97\x8f" }
+      else if (disp == "ready")   { color = green;  glyph = "\xe2\x97\x8f" }
+      else                        { color = dim;    glyph = "\xe2\x97\x8b" }
+      printf "%s%s %s%-16s%s %s(%s) %s%s\n",
+        color, glyph, bold, label, reset, dim, disp, $4, reset
+    }
+  ' <(printf '%s' "$sorted") <(printf '%s' "$sorted")
+}
+
+human_age() {
+  local s="$1"
+  if   (( s < 60 ));   then printf '%ds' "$s"
+  elif (( s < 3600 )); then printf '%dm' $(( s / 60 ))
+  else                      printf '%dh' $(( s / 3600 )); fi
+}
+
+# ---- reap -----------------------------------------------------------------
+
+cmd_reap() {
+  [ -d "$SESSIONS_DIR" ] || return 0
+  local now; now="$(now_epoch)"
+  local f removed=0
+  for f in "$SESSIONS_DIR"/*.json; do
+    [ -e "$f" ] || continue
+    case "$(basename "$f")" in .tmp.*) continue;; esac
+    local pid updated upd age
+    pid="$(jq -r '.pid // 0' "$f" 2>/dev/null || echo 0)"
+    updated="$(jq -r '.updated_at // ""' "$f" 2>/dev/null || echo '')"
+    upd="$(iso_to_epoch "$updated")"; age=$(( now - upd ))
+    if ! pid_alive "$pid" || (( age > HIDE_SECS )); then
+      rm -f "$f"; removed=$(( removed + 1 ))
+    fi
+  done
+  printf 'reaped %d session file(s)\n' "$removed"
+}
+
+# ---- install / uninstall --------------------------------------------------
+
+default_config_dirs() {
+  if [ -n "${CLAUDE_CONFIG_DIR:-}" ]; then
+    printf '%s\n' "$CLAUDE_CONFIG_DIR"
+  else
+    printf '%s\n' "$HOME/.claude"
+  fi
+}
+
+# Resolve the absolute dir this script lives in (so we can find tbled-hook).
+script_dir() {
+  local src="${BASH_SOURCE[0]}"
+  while [ -h "$src" ]; do src="$(readlink "$src")"; done
+  cd -P "$(dirname "$src")" && pwd
+}
+
+install_bins() {
+  mkdir -p "$BIN_DIR"
+  local src; src="$(script_dir)"
+  install -m 0755 "$src/tbled-hook" "$BIN_DIR/tbled-hook"
+  install -m 0755 "$src/tbled"      "$BIN_DIR/tbled"
+  # Stage the MTMR widget to a stable path too, if it ships alongside.
+  if [ -f "$src/../mtmr/tbled-strip.sh" ]; then
+    mkdir -p "$TBLED_DIR/mtmr"
+    install -m 0755 "$src/../mtmr/tbled-strip.sh" "$TBLED_DIR/mtmr/tbled-strip.sh"
+  fi
+  printf '%s/tbled-hook' "$BIN_DIR"
+}
+
+merge_hooks() {
+  local settings="$1" hook="$2"
+  local tmp; tmp="$(mktemp)"
+  if [ -s "$settings" ]; then
+    jq --arg hook "$hook" --argjson events "$EVENTS" '
+      .hooks = (.hooks // {})
+      | reduce $events[] as $e (.;
+          .hooks[$e] = ((.hooks[$e] // [])
+            | if any(.[]?; (.hooks // []) | any(.command == $hook))
+              then .
+              else . + [{"hooks":[{"type":"command","command":$hook}]}]
+              end))
+    ' "$settings" > "$tmp"
+  else
+    jq -n --arg hook "$hook" --argjson events "$EVENTS" '
+      {hooks: (reduce $events[] as $e ({};
+        .[$e] = [{"hooks":[{"type":"command","command":$hook}]}]))}
+    ' > "$tmp"
+  fi
+  mv -f "$tmp" "$settings"
+}
+
+strip_hooks() {
+  local settings="$1" hook="$2"
+  [ -s "$settings" ] || return 0
+  local tmp; tmp="$(mktemp)"
+  jq --arg hook "$hook" '
+    if .hooks then
+      .hooks |= (with_entries(
+          .value |= ( map(.hooks |= map(select(.command != $hook)))
+                    | map(select((.hooks // []) | length > 0)) ))
+        | with_entries(select((.value | length) > 0)))
+    else . end
+    | if (.hooks | length) == 0 then del(.hooks) else . end
+  ' "$settings" > "$tmp"
+  mv -f "$tmp" "$settings"
+}
+
+cmd_install() {
+  local dirs=()
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --config-dir) shift; dirs+=("$1") ;;
+      *) die "unknown arg: $1" ;;
+    esac
+    shift
+  done
+  if [ ${#dirs[@]} -eq 0 ]; then
+    while IFS= read -r line; do dirs+=("$line"); done < <(default_config_dirs)
+  fi
+
+  local hook; hook="$(install_bins)"
+  printf 'installed hook binary → %s\n' "$hook"
+  mkdir -p "$SESSIONS_DIR"
+
+  local d
+  for d in "${dirs[@]}"; do
+    [ -d "$d" ] || { printf '%sskip %s (no such config dir)%s\n' "$c_dim" "$d" "$c_reset"; continue; }
+    local settings="$d/settings.json"
+    if [ -f "$settings" ]; then
+      local bak="$settings.tbled-backup.$(date +%Y%m%d%H%M%S)"
+      cp "$settings" "$bak"
+      printf 'backed up %s → %s\n' "$settings" "$(basename "$bak")"
+    fi
+    merge_hooks "$settings" "$hook"
+    printf '%s✓ wired hooks into %s%s\n' "$c_green" "$settings" "$c_reset"
+  done
+  printf '\nDone. New Claude Code sessions in these config dirs will report status.\n'
+  printf 'Try: %stbled status%s in another terminal while a session runs.\n' "$c_bold" "$c_reset"
+}
+
+cmd_uninstall() {
+  local dirs=()
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --config-dir) shift; dirs+=("$1") ;;
+      *) die "unknown arg: $1" ;;
+    esac
+    shift
+  done
+  if [ ${#dirs[@]} -eq 0 ]; then
+    while IFS= read -r line; do dirs+=("$line"); done < <(default_config_dirs)
+  fi
+
+  local hook="$BIN_DIR/tbled-hook"
+  local d
+  for d in "${dirs[@]}"; do
+    local settings="$d/settings.json"
+    [ -f "$settings" ] || continue
+    local bak="$settings.tbled-backup.$(date +%Y%m%d%H%M%S)"
+    cp "$settings" "$bak"
+    strip_hooks "$settings" "$hook"
+    printf '%s✓ removed hooks from %s%s (backup: %s)\n' "$c_green" "$settings" "$c_reset" "$(basename "$bak")"
+  done
+  printf 'Hooks removed. The %s directory was left in place.\n' "$TBLED_DIR"
+}
+
+usage() {
+  cat <<'EOF'
+tbled — Touch Bar status lights for Claude Code
+
+USAGE:
+  tbled status                          show live session tiles
+  tbled install   [--config-dir DIR]…   wire hooks into settings.json
+  tbled uninstall [--config-dir DIR]…   remove them again
+  tbled reap                            delete dead/expired session files
+  tbled dir                             print the state directory
+
+Defaults to $CLAUDE_CONFIG_DIR (or ~/.claude). Pass --config-dir one or more
+times to target ~/.claude-personal, ~/.claude-work, etc.
+EOF
+}
+
+main() {
+  local cmd="${1:-status}"; shift || true
+  case "$cmd" in
+    status)    cmd_status "$@" ;;
+    reap)      cmd_reap "$@" ;;
+    install)   cmd_install "$@" ;;
+    uninstall) cmd_uninstall "$@" ;;
+    dir)       printf '%s\n' "$TBLED_DIR" ;;
+    -h|--help|help) usage ;;
+    *) die "unknown command: $cmd (try 'tbled help')" ;;
+  esac
+}
+
+main "$@"

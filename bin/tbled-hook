@@ -1,0 +1,151 @@
+#!/usr/bin/env bash
+#
+# tbled-hook — Claude Code hook handler for the tbled Touch Bar status app.
+#
+# One script handles every hook event. Claude Code pipes the hook payload as
+# JSON on stdin; we read `hook_event_name` from it (an explicit argument may
+# override, for testing) and map the event to a per-session state file under
+# $TBLED_DIR/sessions/<session_id>.json.
+#
+#   working (red)    — Claude is mid-turn (prompt submitted, tools running)
+#   waiting (yellow) — blocked on the user (permission prompt / question)
+#   ready   (green)  — turn finished, idle
+#
+# Design notes:
+#   * Each write reconstructs the whole record from the payload + inherited
+#     env, so there is no read-modify-write race. The only field carried over
+#     from the previous file is created_at (for stable tile ordering) and,
+#     for keep-alive events, the last real state.
+#   * Writes are atomic: temp file in the same dir + mv.
+#   * Must be fast (fires on every event): one jq pass to parse the payload,
+#     one to build the record — plus a git call only when first creating a file.
+#   * Unknown events are a no-op, so new Claude Code releases can't break us.
+
+set -euo pipefail
+
+TBLED_DIR="${TBLED_DIR:-$HOME/.tbled}"
+SESSIONS_DIR="$TBLED_DIR/sessions"
+
+payload="$(cat)"
+
+# Extract every scalar we need in a SINGLE jq pass (the hot path — tool events —
+# must stay cheap, and jq startup dominates). Fields are joined with a unit
+# separator (0x1F), NOT a tab: `read` treats tab as whitespace-IFS and would
+# collapse empty fields (e.g. a missing notification_type), shifting the rest.
+IFS=$'\037' read -r j_event session_id cwd ntype source < <(
+  printf '%s' "$payload" | jq -r \
+    '[.hook_event_name // "", .session_id // "", .cwd // "",
+      .notification_type // "", .source // ""] | join("\u001f")' 2>/dev/null
+)
+
+# An explicit argv[1] overrides the parsed event (used by tests).
+event="${1:-$j_event}"
+
+# Without a session_id we can't key anything; bail quietly.
+[ -n "$session_id" ] || exit 0
+
+file="$SESSIONS_DIR/${session_id}.json"
+
+# SessionEnd: session is gone, remove its tile and exit.
+if [ "$event" = "SessionEnd" ]; then
+  rm -f "$file"
+  exit 0
+fi
+
+[ "$cwd" = "null" ] && cwd=""
+
+# Map the event to a forced state. Empty string means "keep-alive only":
+# refresh updated_at but preserve whatever state the tile already had.
+state=""
+case "$event" in
+  SessionStart)
+    # A fresh start / resume / clear is genuinely idle → ready. But
+    # source=compact fires on *mid-turn* auto-compaction: resetting to ready
+    # then would paint a working tile green until the next tool event. Preserve
+    # state in that case (same reasoning as the Notification keep-alive below).
+    case "$source" in
+      compact) state="" ;;
+      *)       state="ready" ;;
+    esac ;;
+  UserPromptSubmit)
+    state="working" ;;
+  PreToolUse|PostToolUse|PostToolBatch|PostToolUseFailure)
+    state="working" ;;
+  Stop)
+    state="ready" ;;
+  Notification)
+    case "$ntype" in
+      permission_prompt|elicitation_dialog|agent_needs_input)
+        state="waiting" ;;
+      idle_prompt)
+        state="ready" ;;
+      *)
+        # auth_success, agent_completed, elicitation_complete, ... may fire
+        # mid-turn; don't repaint the tile, just keep it alive.
+        state="" ;;
+    esac ;;
+  *)
+    # Unknown / unmapped event. Keep-alive only if we already track this
+    # session; otherwise ignore entirely.
+    [ -f "$file" ] || exit 0
+    state="" ;;
+esac
+
+mkdir -p "$SESSIONS_DIR"
+
+now="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+# Only compute a display name when creating a new record (git call is the one
+# slowish step; the hot path — tool events on an existing session — skips it).
+name=""
+if [ ! -f "$file" ]; then
+  if [ -n "$cwd" ]; then
+    top="$(cd "$cwd" 2>/dev/null && git rev-parse --show-toplevel 2>/dev/null || true)"
+    name="$(basename "${top:-$cwd}")"
+  else
+    name="session"
+  fi
+fi
+
+# Read previous record (if any) for jq to carry over created_at/name/state.
+prev="/dev/null"
+[ -f "$file" ] && prev="$file"
+
+tmp="$(mktemp "$SESSIONS_DIR/.tmp.${session_id}.XXXXXX")"
+trap 'rm -f "$tmp"' EXIT
+
+printf '%s' "$payload" | jq \
+  --slurpfile prevArr "$prev" \
+  --arg now "$now" \
+  --arg state "$state" \
+  --arg name "$name" \
+  --arg cwd "$cwd" \
+  --arg pid "$PPID" \
+  --arg term_app "${TERM_PROGRAM:-}" \
+  --arg iterm "${ITERM_SESSION_ID:-}" \
+  --arg term_session "${TERM_SESSION_ID:-}" \
+  '
+  . as $p
+  | ($prevArr[0] // {}) as $prev
+  | {
+      session_id: ($p.session_id),
+      name: (if $name != "" then $name
+             elif ($prev.name // "") != "" then $prev.name
+             else "session" end),
+      cwd: (if $cwd != "" then $cwd else ($prev.cwd // "") end),
+      pid: ($pid | tonumber? // 0),
+      state: (if $state != "" then $state
+              else ($prev.state // "ready") end),
+      created_at: ($prev.created_at // $now),
+      updated_at: $now,
+      term: {
+        app: (if $term_app != "" then $term_app else ($prev.term.app // "") end),
+        iterm_session_id: (if $iterm != "" then $iterm else ($prev.term.iterm_session_id // "") end),
+        term_session_id: (if $term_session != "" then $term_session else ($prev.term.term_session_id // "") end)
+      }
+    }
+  ' > "$tmp"
+
+mv -f "$tmp" "$file"
+trap - EXIT
+exit 0
