@@ -25,17 +25,27 @@ final class MenuBarController: NSObject {
     }
 
     private func rebuild() {
-        // Title: one coloured dot per session (max 8), or a dim dot when idle.
+        // Title: a coloured dot + session name per session, or a dim dot idle.
         let title = NSMutableAttributedString()
         if sessions.isEmpty {
             title.append(NSAttributedString(string: "○", attributes: [
                 .foregroundColor: NSColor.tertiaryLabelColor,
             ]))
         } else {
-            for (i, r) in sessions.prefix(8).enumerated() {
-                if i > 0 { title.append(NSAttributedString(string: " ")) }
+            let shown = sessions.prefix(5)
+            for (i, r) in shown.enumerated() {
+                if i > 0 { title.append(NSAttributedString(string: "  ")) }
                 title.append(NSAttributedString(string: Theme.glyph(for: r.display), attributes: [
                     .foregroundColor: Theme.color(for: r.display),
+                ]))
+                title.append(NSAttributedString(string: " " + truncate(r.label, maxLength: 14), attributes: [
+                    .foregroundColor: NSColor.labelColor,
+                    .font: NSFont.systemFont(ofSize: 12),
+                ]))
+            }
+            if sessions.count > shown.count {
+                title.append(NSAttributedString(string: "  +\(sessions.count - shown.count)", attributes: [
+                    .foregroundColor: NSColor.secondaryLabelColor,
                 ]))
             }
         }
