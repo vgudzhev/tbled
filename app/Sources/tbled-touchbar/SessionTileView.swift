@@ -26,7 +26,8 @@ final class SessionTileView: NSButton {
         self.rendered = r
         let color = Theme.color(for: r.display)
         layer?.backgroundColor = color.cgColor
-        let text = truncate(r.label, maxLength: 12)
+        // App-region tiles have room; AI session titles are descriptive but long.
+        let text = truncate(r.label, maxLength: 22)
         let attr = NSAttributedString(string: text, attributes: [
             .foregroundColor: Theme.textColor(for: r.display),
             .font: NSFont.systemFont(ofSize: 14, weight: .semibold),

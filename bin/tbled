@@ -160,6 +160,8 @@ install_bins() {
   local src; src="$(script_dir)"
   install -m 0755 "$src/tbled-hook" "$BIN_DIR/tbled-hook"
   install -m 0755 "$src/tbled"      "$BIN_DIR/tbled"
+  # Stage the native-app on/off control script, if it ships alongside.
+  [ -f "$src/tbled-app" ] && install -m 0755 "$src/tbled-app" "$BIN_DIR/tbled-app"
   # Stage the MTMR widget to a stable path too, if it ships alongside.
   if [ -f "$src/../mtmr/tbled-strip.sh" ]; then
     mkdir -p "$TBLED_DIR/mtmr"
