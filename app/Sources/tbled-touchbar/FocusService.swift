@@ -1,51 +1,106 @@
 import AppKit
 import TbledCore
 
-/// Phase 4: tap-to-focus. Best-effort activation of the terminal running a
-/// session, using the terminal metadata captured by the hook at SessionStart.
+/// Tap-to-focus: bring the terminal running a session to the front, selecting
+/// the exact window/tab — so each tile behaves like a link back to its session.
 ///
-///  * iTerm2  — match on the recorded ITERM_SESSION_ID via AppleScript.
-///  * Terminal.app / VS Code / unknown — activate the app by bundle id.
+///  * Terminal.app — match the tab by its TTY (derived from the session PID).
+///  * iTerm2       — match the session by the recorded ITERM_SESSION_ID UUID,
+///                   falling back to TTY.
+///  * VS Code / other — activate the app (best effort).
+///
+/// The AppleScript that drives Terminal/iTerm needs Automation permission;
+/// macOS prompts the first time the user taps a tile.
 enum FocusService {
 
     static func focus(session: Session) {
-        let app = session.term?.app ?? ""
-        switch app {
-        case "iTerm.app":
-            focusITerm(session)
-        case "Apple_Terminal":
-            activate(bundleId: "com.apple.Terminal")
-        case "vscode":
-            activate(bundleId: "com.microsoft.VSCode")
-        default:
-            // Unknown terminal: nothing reliable to do.
-            break
+        // ps + AppleScript are blocking; keep them off the main thread.
+        DispatchQueue.global(qos: .userInitiated).async {
+            let app = session.term?.app ?? ""
+            switch app {
+            case "iTerm.app":
+                focusITerm(session)
+            case "Apple_Terminal":
+                if let tty = tty(forPID: session.pid) {
+                    focusTerminalTab(tty: tty)
+                } else {
+                    activate(bundleId: "com.apple.Terminal")
+                }
+            case "vscode":
+                activate(bundleId: "com.microsoft.VSCode")
+            default:
+                break
+            }
         }
     }
 
-    private static func focusITerm(_ session: Session) {
-        // ITERM_SESSION_ID looks like "w0t2p0:UUID"; iTerm's AppleScript exposes
-        // the trailing UUID as each session's `id`.
-        let raw = session.term?.itermSessionId ?? ""
-        let uuid = raw.split(separator: ":").last.map(String.init) ?? raw
-        guard !uuid.isEmpty else { activate(bundleId: "com.googlecode.iterm2"); return }
+    // MARK: - Terminal.app (match by tty)
+
+    private static func focusTerminalTab(tty: String) {
         let script = """
-        tell application "iTerm2"
-          activate
+        tell application "Terminal"
           repeat with w in windows
             repeat with t in tabs of w
-              repeat with s in sessions of t
-                if id of s is "\(uuid)" then
-                  select w
-                  tell t to select
-                  return
-                end if
-              end repeat
+              if tty of t is "\(tty)" then
+                set selected of t to true
+                set index of w to 1
+                activate
+                return
+              end if
             end repeat
           end repeat
+          activate
         end tell
         """
         runAppleScript(script)
+    }
+
+    // MARK: - iTerm2 (match by session UUID, tty fallback)
+
+    private static func focusITerm(_ session: Session) {
+        let raw = session.term?.itermSessionId ?? ""
+        let uuid = raw.split(separator: ":").last.map(String.init) ?? raw
+        if !uuid.isEmpty {
+            let script = """
+            tell application "iTerm2"
+              repeat with w in windows
+                repeat with t in tabs of w
+                  repeat with s in sessions of t
+                    if id of s is "\(uuid)" then
+                      select w
+                      tell t to select
+                      activate
+                      return
+                    end if
+                  end repeat
+                end repeat
+              end repeat
+              activate
+            end tell
+            """
+            runAppleScript(script)
+        } else {
+            activate(bundleId: "com.googlecode.iterm2")
+        }
+    }
+
+    // MARK: - Helpers
+
+    /// The controlling TTY of a process, as a `/dev/ttysNNN` path.
+    private static func tty(forPID pid: Int) -> String? {
+        guard pid > 0 else { return nil }
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: "/bin/ps")
+        p.arguments = ["-o", "tty=", "-p", String(pid)]
+        let pipe = Pipe()
+        p.standardOutput = pipe
+        p.standardError = Pipe()
+        do { try p.run() } catch { return nil }
+        p.waitUntilExit()
+        let out = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !out.isEmpty, out != "??", out != "?" else { return nil }
+        return out.hasPrefix("/dev/") ? out : "/dev/\(out)"
     }
 
     private static func activate(bundleId: String) {
@@ -56,9 +111,10 @@ enum FocusService {
     }
 
     private static func runAppleScript(_ source: String) {
-        DispatchQueue.global(qos: .userInitiated).async {
-            var error: NSDictionary?
-            NSAppleScript(source: source)?.executeAndReturnError(&error)
+        var error: NSDictionary?
+        NSAppleScript(source: source)?.executeAndReturnError(&error)
+        if let error = error, ProcessInfo.processInfo.environment["TBLED_DIAG"] != nil {
+            FileHandle.standardError.write("focus AppleScript error: \(error)\n".data(using: .utf8)!)
         }
     }
 }
