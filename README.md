@@ -11,12 +11,30 @@ scraping terminals.
  working      waiting      ready
 ```
 
+## See it in action
+
+![tbled demo](brag-output/brag.jpg)
+
+**[Watch the 20-second demo video →](brag-output/brag.mp4)**
+
+No terminals. No context switching. No guessing. Just dots.
+
 | Colour | State    | Meaning                                                    |
 |--------|----------|------------------------------------------------------------|
 | 🔴 red    | working  | Claude is mid-turn (thinking, running tools, editing)      |
 | 🟡 yellow | waiting  | blocked on you (permission prompt / question)              |
 | 🟢 green  | ready    | turn finished, session idle                                |
 | ⚪ dim    | stale    | no activity for > 20 min (probably abandoned)              |
+
+## Features
+
+- **Live status at a glance** — Know the state of all Claude Code sessions without switching windows
+- **Multiple sessions** — Track 3+ projects simultaneously with color-coded tiles
+- **Smart state detection** — Automatically detects working/waiting/ready/stale states from hook events
+- **Touch Bar + Menu Bar** — Renders on Touch Bar (primary) with menu bar fallback for non-Touch-Bar Macs
+- **Session names** — Tiles show each session's name (honours `/rename`; otherwise Claude's derived name), so two sessions in the same repo stay distinct
+- **Tap to focus** — Click a tile to jump directly to that session's terminal tab
+- **Zero overhead** — State stored in files (no daemon), hooks integrate with Claude Code's native event system
 
 ## How it works
 
@@ -103,7 +121,47 @@ swift run tbled-selftest     # verify the TbledCore logic (works under CLT-only)
 swift test                   # full XCTest suite (needs Xcode for XCTest)
 ```
 
-Auto-start via `packaging/com.tbled.app.plist` (a LaunchAgent template).
+#### Run it — one-word on/off
+
+`tbled-app` builds/stages the binary and controls the running app. `tbled install`
+stages it to `~/.tbled/bin`; you can also run it straight from `./bin/tbled-app`.
+
+```sh
+# one-time: build a release binary and stage it to ~/.tbled/bin/tbled-touchbar
+./bin/tbled-app build ./app
+
+# then control it with one word
+tbled-app on                 # launch (Touch Bar tiles + menu-bar mirror)
+tbled-app off                # stop
+tbled-app toggle             # flip on/off
+tbled-app status             # on / off
+tbled-app restart
+```
+
+By default it takes over the Touch Bar's **app region** (replacing the focused
+app's own bar). For a compact dot in the **Control Strip** (right, by brightness)
+instead, set the mode:
+
+```sh
+TBLED_TOUCHBAR_MODE=strip tbled-app on
+```
+
+#### Add to `~/.zshrc`
+
+Put `~/.tbled/bin` on your `PATH` and alias the toggle, so you can flip it from
+anywhere by typing `tb`:
+
+```sh
+# tbled — Touch Bar status lights
+export PATH="$HOME/.tbled/bin:$PATH"
+alias tb='tbled-app toggle'
+```
+
+Reload with `source ~/.zshrc` (or open a new terminal), then just type **`tb`**.
+For a global hotkey, add a *Run Shell Script* action running
+`$HOME/.tbled/bin/tbled-app toggle` in **Shortcuts.app** and assign it a key.
+
+Auto-start on login via `packaging/com.tbled.app.plist` (a LaunchAgent template).
 
 ## Configuration
 
@@ -155,4 +213,14 @@ bin/tbled             CLI: status / install / uninstall / reap / dir
 mtmr/tbled-strip.sh   MTMR Touch Bar widget (+ mtmr/README.md)
 app/                  native SwiftPM Touch Bar app (TbledCore + CDFR shim)
 packaging/            LaunchAgent template
+brag-output/          demo video and social media assets
 ```
+
+## Share
+
+> "just shipped tbled — watch your Claude Code sessions live on the Touch Bar.  
+> 🔴 working 🟡 waiting 🟢 ready. no terminals. no context switching. just dots."
+
+- **Demo video:** [brag-output/brag.mp4](brag-output/brag.mp4)
+- **Poster frame:** [brag-output/brag.jpg](brag-output/brag.jpg)
+- **Full share copy:** [brag-output/share-copy.txt](brag-output/share-copy.txt)
