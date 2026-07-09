@@ -32,10 +32,10 @@ payload="$(cat)"
 # must stay cheap, and jq startup dominates). Fields are joined with a unit
 # separator (0x1F), NOT a tab: `read` treats tab as whitespace-IFS and would
 # collapse empty fields (e.g. a missing notification_type), shifting the rest.
-IFS=$'\037' read -r j_event session_id cwd ntype source transcript < <(
+IFS=$'\037' read -r j_event session_id cwd ntype source < <(
   printf '%s' "$payload" | jq -r \
     '[.hook_event_name // "", .session_id // "", .cwd // "",
-      .notification_type // "", .source // "", .transcript_path // ""] | join("\u001f")' 2>/dev/null
+      .notification_type // "", .source // ""] | join("\u001f")' 2>/dev/null
 )
 
 # An explicit argv[1] overrides the parsed event (used by tests).
@@ -95,29 +95,28 @@ mkdir -p "$SESSIONS_DIR"
 
 now="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
-# Tile name. Prefer Claude's own session title (the AI-generated "ai-title" it
-# records in the transcript) — it's meaningful and, unlike the repo name,
-# distinguishes two sessions in the same directory. Fall back to the git repo /
-# cwd basename. Empty here means "keep whatever the previous record had".
+# Tile name = Claude's own session name, from the per-session file it maintains
+# at <config>/sessions/<pid>.json. That reflects a user `/rename` and otherwise
+# holds Claude's derived name (repo + suffix, which also distinguishes two
+# sessions in the same directory) — exactly what the user thinks of as the
+# session name. Empty here means "keep whatever the previous record had".
 #
-# We only touch the transcript read on conversation boundaries —
-# SessionStart/UserPromptSubmit/Stop/Notification — never on the hot tool path.
-# `tail -r | grep -m1` reads the transcript newest-first and stops at the first
-# (latest) title line — fast even on a multi-MB transcript. grep closing the
-# pipe kills `tail -r` with SIGPIPE, so the whole thing is wrapped in
-# `{ …; } || true` to keep `pipefail`/`set -e` from treating that (or grep's
-# no-match exit 1 on a title-less fresh session) as fatal.
+# Keyed by the session's Claude PID (== $PPID, the process that spawned this
+# hook); we also require the file's sessionId to match, guarding against a
+# reused/stale pid file. Read only on conversation boundaries, not the hot tool
+# path. It's a tiny file, so this is far cheaper than scanning the transcript.
 name=""
 case "$event" in
   SessionStart|UserPromptSubmit|Stop|Notification)
-    if [ -n "$transcript" ] && [ -f "$transcript" ]; then
-      name="$( { tail -r "$transcript" 2>/dev/null \
-        | grep -m1 '"type":"ai-title"' \
-        | jq -r '.aiTitle // empty' 2>/dev/null; } || true )"
+    sfile="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/sessions/${PPID}.json"
+    if [ -f "$sfile" ]; then
+      name="$(jq -r --arg sid "$session_id" \
+        'select(.sessionId == $sid) | .name // empty' "$sfile" 2>/dev/null || true)"
     fi ;;
 esac
 
-# No title yet (fresh session) and no existing record → derive from the repo.
+# No session-name file yet (very fresh session) and no existing record →
+# derive from the git repo / cwd basename.
 if [ -z "$name" ] && [ ! -f "$file" ]; then
   if [ -n "$cwd" ]; then
     top="$(cd "$cwd" 2>/dev/null && git rev-parse --show-toplevel 2>/dev/null || true)"
