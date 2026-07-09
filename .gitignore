@@ -3,4 +3,7 @@ app/.build/
 *.tbled-backup.*
 .claude/
 
+# stray artifacts from other tasks/tools that land in this dir
 brag-output*
+.agents/
+skills-lock.json
