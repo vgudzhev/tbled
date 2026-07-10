@@ -40,9 +40,70 @@ iso_to_epoch() {
 
 pid_alive() { [ "$1" -gt 0 ] 2>/dev/null && kill -0 "$1" 2>/dev/null; }
 
+# ---- sync -----------------------------------------------------------------
+# Bridge Claude Code's own per-session files (<config>/sessions/<pid>.json,
+# which it maintains for EVERY live session with a busy/waiting/idle status)
+# into tbled's state dir. This makes sessions visible even when they predate the
+# hook install or run in a config dir without hooks. Hook-owned records (precise
+# working/waiting/ready) are never clobbered — sync only fills the gaps.
+
+# Convert epoch milliseconds → ISO-8601 Z.
+ms_to_iso() { date -u -r "$(( ${1:-0} / 1000 ))" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo ''; }
+
+cmd_sync() {
+  mkdir -p "$SESSIONS_DIR"
+  local now; now="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  local d f
+  for d in "$HOME"/.claude*; do
+    [ -d "$d/sessions" ] || continue
+    for f in "$d"/sessions/*.json; do
+      [ -e "$f" ] || continue
+      local rec pid sid nm st cwd started
+      rec="$(jq -r '[(.pid//0),(.sessionId//""),(.name//""),(.status//""),(.cwd//""),(.startedAt//0)] | @tsv' "$f" 2>/dev/null)" || continue
+      IFS=$'\t' read -r pid sid nm st cwd started <<<"$rec"
+      [ -n "$sid" ] && [ "$sid" != "null" ] || continue
+      pid_alive "$pid" || continue                    # only live sessions
+
+      local tfile="$SESSIONS_DIR/${sid}.json"
+      if [ -f "$tfile" ]; then                        # don't clobber hook records
+        [ "$(jq -r '.source // "hook"' "$tfile" 2>/dev/null)" = "hook" ] && continue
+      fi
+
+      local state
+      case "$st" in
+        busy)    state="working" ;;
+        waiting) state="waiting" ;;
+        *)       state="ready" ;;                     # idle / unknown
+      esac
+
+      # A synced session is known-alive (pid check above), so keep updated_at
+      # fresh (= now) — it must not be hidden by the stale rule just for being
+      # idle. created_at comes from Claude's session start time, for ordering.
+      local created=""
+      [ -f "$tfile" ] && created="$(jq -r '.created_at // empty' "$tfile" 2>/dev/null)"
+      if [ -z "$created" ]; then
+        created="$(ms_to_iso "$started")"; [ -n "$created" ] || created="$now"
+      fi
+
+      local tmp; tmp="$(mktemp "$SESSIONS_DIR/.tmp.${sid}.XXXXXX")"
+      jq -n --arg sid "$sid" --arg nm "$nm" --arg cwd "$cwd" \
+        --argjson pid "${pid:-0}" --arg state "$state" \
+        --arg created "$created" --arg upd "$now" \
+        '{session_id:$sid,
+          name:(if $nm=="" or $nm=="null" then "session" else $nm end),
+          cwd:$cwd, pid:$pid, state:$state,
+          created_at:$created, updated_at:$upd,
+          source:"claude-session",
+          term:{app:"",iterm_session_id:"",term_session_id:""}}' > "$tmp" \
+        && mv -f "$tmp" "$tfile" || rm -f "$tmp"
+    done
+  done
+}
+
 # ---- status ---------------------------------------------------------------
 
 cmd_status() {
+  cmd_sync   # pull in any sessions Claude knows about but hooks missed
   if [ ! -d "$SESSIONS_DIR" ] || ! compgen -G "$SESSIONS_DIR/*.json" >/dev/null 2>&1; then
     printf '%sno active sessions%s\n' "$c_dim" "$c_reset"
     return 0
@@ -273,6 +334,8 @@ tbled — Touch Bar status lights for Claude Code
 
 USAGE:
   tbled status                          show live session tiles
+  tbled sync                            import Claude's own live sessions (any
+                                        session, even without hooks installed)
   tbled install   [--config-dir DIR]…   wire hooks into settings.json
   tbled uninstall [--config-dir DIR]…   remove them again
   tbled reap                            delete dead/expired session files
@@ -287,6 +350,7 @@ main() {
   local cmd="${1:-status}"; shift || true
   case "$cmd" in
     status)    cmd_status "$@" ;;
+    sync)      cmd_sync "$@" ;;
     reap)      cmd_reap "$@" ;;
     install)   cmd_install "$@" ;;
     uninstall) cmd_uninstall "$@" ;;

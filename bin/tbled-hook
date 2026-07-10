@@ -148,6 +148,7 @@ printf '%s' "$payload" | jq \
   | ($prevArr[0] // {}) as $prev
   | {
       session_id: ($p.session_id),
+      source: "hook",
       name: (if $name != "" then $name
              elif ($prev.name // "") != "" then $prev.name
              else "session" end),

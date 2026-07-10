@@ -15,6 +15,10 @@ STALE_SECS="${TBLED_STALE_SECS:-1200}"   # 20 min → ⚪
 HIDE_SECS="${TBLED_HIDE_SECS:-7200}"     # 2 h   → hidden
 MAXLEN="${TBLED_NAME_MAXLEN:-10}"
 
+# Import Claude's own live sessions (best effort) so any running session shows,
+# even without hooks installed. Creates the sessions dir on first run.
+[ -x "$HOME/.tbled/bin/tbled" ] && "$HOME/.tbled/bin/tbled" sync 2>/dev/null
+
 [ -d "$SESSIONS_DIR" ] || { printf '💤'; exit 0; }
 
 now=$(date -u +%s)

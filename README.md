@@ -11,14 +11,6 @@ scraping terminals.
  working      waiting      ready
 ```
 
-## See it in action
-
-![tbled demo](brag-output/brag.jpg)
-
-**[Watch the 20-second demo video →](brag-output/brag.mp4)**
-
-No terminals. No context switching. No guessing. Just dots.
-
 | Colour | State    | Meaning                                                    |
 |--------|----------|------------------------------------------------------------|
 | 🔴 red    | working  | Claude is mid-turn (thinking, running tools, editing)      |
@@ -33,6 +25,7 @@ No terminals. No context switching. No guessing. Just dots.
 - **Smart state detection** — Automatically detects working/waiting/ready/stale states from hook events
 - **Touch Bar + Menu Bar** — Renders on Touch Bar (primary) with menu bar fallback for non-Touch-Bar Macs
 - **Session names** — Tiles show each session's name (honours `/rename`; otherwise Claude's derived name), so two sessions in the same repo stay distinct
+- **Catches every session** — `tbled sync` also reads Claude's own live session files, so sessions started *before* you installed the hooks (or in a config dir without them) still show up (busy/waiting/idle → 🔴/🟡/🟢)
 - **Tap to focus** — Click a tile to jump directly to that session's terminal tab
 - **Zero overhead** — State stored in files (no daemon), hooks integrate with Claude Code's native event system
 
@@ -91,7 +84,8 @@ pass no `--config-dir`.
 ### CLI
 
 ```
-tbled status      pretty-print the live session tiles
+tbled status      pretty-print the live session tiles (auto-runs sync)
+tbled sync        import Claude's own live sessions (works without hooks)
 tbled install     wire hooks into settings.json (backs up, idempotent)
 tbled uninstall   remove them again
 tbled reap        delete session files for dead / expired sessions
@@ -213,14 +207,4 @@ bin/tbled             CLI: status / install / uninstall / reap / dir
 mtmr/tbled-strip.sh   MTMR Touch Bar widget (+ mtmr/README.md)
 app/                  native SwiftPM Touch Bar app (TbledCore + CDFR shim)
 packaging/            LaunchAgent template
-brag-output/          demo video and social media assets
 ```
-
-## Share
-
-> "just shipped tbled — watch your Claude Code sessions live on the Touch Bar.  
-> 🔴 working 🟡 waiting 🟢 ready. no terminals. no context switching. just dots."
-
-- **Demo video:** [brag-output/brag.mp4](brag-output/brag.mp4)
-- **Poster frame:** [brag-output/brag.jpg](brag-output/brag.jpg)
-- **Full share copy:** [brag-output/share-copy.txt](brag-output/share-copy.txt)

@@ -64,6 +64,9 @@ final class SessionStore {
             if self.dirFD < 0 || !FileManager.default.fileExists(atPath: self.sessionsDir.path) {
                 self.startDirectorySource()
             }
+            // Pull in any sessions Claude knows about but hooks missed (e.g.
+            // started before install). `tbled sync` writes them into our dir.
+            self.runSync()
             self.reload()
         }
         t.resume()
@@ -75,6 +78,18 @@ final class SessionStore {
         let work = DispatchWorkItem { [weak self] in self?.reload() }
         debounce = work
         queue.asyncAfter(deadline: .now() + 0.12, execute: work)
+    }
+
+    /// Run `tbled sync` (best effort) to import Claude's own live sessions.
+    private func runSync() {
+        let tbled = (("~/.tbled/bin/tbled") as NSString).expandingTildeInPath
+        guard FileManager.default.isExecutableFile(atPath: tbled) else { return }
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: tbled)
+        p.arguments = ["sync"]
+        p.standardOutput = FileHandle.nullDevice
+        p.standardError = FileHandle.nullDevice
+        do { try p.run(); p.waitUntilExit() } catch { /* best effort */ }
     }
 
     private func reload() {

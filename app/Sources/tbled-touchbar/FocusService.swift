@@ -29,14 +29,20 @@ enum FocusService {
             case "vscode":
                 activate(bundleId: "com.microsoft.VSCode")
             default:
-                break
+                // Synced sessions (from `tbled sync`) carry no terminal app.
+                // Best effort: if it's a Terminal.app tab, focus it by TTY;
+                // otherwise do nothing (don't raise the wrong app).
+                if let tty = tty(forPID: session.pid) {
+                    focusTerminalTab(tty: tty, activateOnMiss: false)
+                }
             }
         }
     }
 
     // MARK: - Terminal.app (match by tty)
 
-    private static func focusTerminalTab(tty: String) {
+    private static func focusTerminalTab(tty: String, activateOnMiss: Bool = true) {
+        let onMiss = activateOnMiss ? "activate" : ""
         let script = """
         tell application "Terminal"
           repeat with w in windows
@@ -49,7 +55,7 @@ enum FocusService {
               end if
             end repeat
           end repeat
-          activate
+          \(onMiss)
         end tell
         """
         runAppleScript(script)
