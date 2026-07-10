@@ -16,7 +16,14 @@
 set -euo pipefail
 
 TBLED_DIR="${TBLED_DIR:-$HOME/.tbled}"
-BIN="$TBLED_DIR/bin/tbled-touchbar"
+APP_BUNDLE="$TBLED_DIR/tbled.app"
+# Prefer the signed .app bundle (stable identity so Accessibility/Automation
+# grants persist); fall back to the bare staged binary.
+if [ -x "$APP_BUNDLE/Contents/MacOS/tbled-touchbar" ]; then
+  BIN="$APP_BUNDLE/Contents/MacOS/tbled-touchbar"
+else
+  BIN="$TBLED_DIR/bin/tbled-touchbar"
+fi
 PIDFILE="$TBLED_DIR/app.pid"
 LOG="$TBLED_DIR/app.log"
 
@@ -63,9 +70,43 @@ cmd_build() {
   [ -f "$src/Package.swift" ] || { echo "no Package.swift in $src" >&2; exit 1; }
   echo "building (release)…"
   swift build -c release --package-path "$src"
+  local built="$src/.build/release/tbled-touchbar"
+  # stage the bare binary (fallback) and a signed .app bundle (stable identity)
   mkdir -p "$TBLED_DIR/bin"
-  install -m 0755 "$src/.build/release/tbled-touchbar" "$BIN"
-  echo "staged → $BIN"
+  install -m 0755 "$built" "$TBLED_DIR/bin/tbled-touchbar"
+  make_bundle "$built"
+  echo "staged → $APP_BUNDLE"
+}
+
+# Assemble a minimal, ad-hoc-signed .app bundle so macOS TCC can form a stable
+# identity for it — this is what makes Accessibility (fullscreen/Space focus)
+# and Automation grants actually register and persist across rebuilds.
+make_bundle() {
+  local built="$1"
+  rm -rf "$APP_BUNDLE"
+  mkdir -p "$APP_BUNDLE/Contents/MacOS"
+  install -m 0755 "$built" "$APP_BUNDLE/Contents/MacOS/tbled-touchbar"
+  cat > "$APP_BUNDLE/Contents/Info.plist" <<'PLIST'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleName</key><string>tbled</string>
+  <key>CFBundleDisplayName</key><string>tbled</string>
+  <key>CFBundleIdentifier</key><string>com.tbled.touchbar</string>
+  <key>CFBundleExecutable</key><string>tbled-touchbar</string>
+  <key>CFBundlePackageType</key><string>APPL</string>
+  <key>CFBundleShortVersionString</key><string>1.0</string>
+  <key>CFBundleVersion</key><string>1</string>
+  <key>LSUIElement</key><true/>
+  <key>LSMinimumSystemVersion</key><string>11.0</string>
+  <key>NSAppleEventsUsageDescription</key><string>tbled focuses the terminal running a Claude Code session.</string>
+</dict>
+</plist>
+PLIST
+  # Ad-hoc sign with a fixed identifier so the TCC entry stays associated.
+  codesign --force --sign - --identifier com.tbled.touchbar "$APP_BUNDLE" >/dev/null 2>&1 \
+    || echo "warning: codesign failed (Accessibility grant may not stick)" >&2
 }
 
 case "${1:-toggle}" in

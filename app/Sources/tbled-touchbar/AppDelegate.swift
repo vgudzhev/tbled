@@ -1,4 +1,5 @@
 import AppKit
+import ApplicationServices
 import TbledCore
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -27,7 +28,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         if ProcessInfo.processInfo.environment["TBLED_DIAG"] != nil {
             let msg = "diag: launched. menuBarButton=\(menuBar.hasStatusButton) "
-                + "touchBarDFR=\(touchBar.available)\n"
+                + "touchBarDFR=\(touchBar.available) "
+                + "accessibilityTrusted=\(AXIsProcessTrusted()) "
+                + "bundleID=\(Bundle.main.bundleIdentifier ?? "none")\n"
             FileHandle.standardError.write(msg.data(using: .utf8)!)
         }
 
