@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 #
-# tbled-hook — Claude Code hook handler for the tbled Touch Bar status app.
+# glowbar-hook — Claude Code hook handler for the glowbar Touch Bar status app.
 #
 # One script handles every hook event. Claude Code pipes the hook payload as
 # JSON on stdin; we read `hook_event_name` from it (an explicit argument may
 # override, for testing) and map the event to a per-session state file under
-# $TBLED_DIR/sessions/<session_id>.json.
+# $GLOWBAR_DIR/sessions/<session_id>.json.
 #
 #   working (red)    — Claude is mid-turn (prompt submitted, tools running)
 #   waiting (yellow) — blocked on the user (permission prompt / question)
@@ -23,8 +23,8 @@
 
 set -euo pipefail
 
-TBLED_DIR="${TBLED_DIR:-$HOME/.tbled}"
-SESSIONS_DIR="$TBLED_DIR/sessions"
+GLOWBAR_DIR="${GLOWBAR_DIR:-$HOME/.glowbar}"
+SESSIONS_DIR="$GLOWBAR_DIR/sessions"
 
 payload="$(cat)"
 

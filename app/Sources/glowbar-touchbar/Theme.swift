@@ -1,5 +1,5 @@
 import AppKit
-import TbledCore
+import GlowbarCore
 
 /// Maps a display state to its tile colour and menu-bar glyph.
 enum Theme {

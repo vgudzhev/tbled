@@ -1,9 +1,9 @@
-# tbled × MTMR (Phase 2 — works today, no compilation)
+# glowbar × MTMR (Phase 2 — works today, no compilation)
 
 [MTMR](https://github.com/Toxblh/MTMR) ("My TouchBar My Rules") is a free, open
 Touch Bar customiser. A single shell-script widget renders the live Claude Code
 sessions straight onto the Touch Bar — no Swift, no build step. This is the
-fastest way to see tbled on real hardware.
+fastest way to see glowbar on real hardware.
 
 ```
 🔴 my-api   🟡 webapp   🟢 infra
@@ -14,10 +14,10 @@ fastest way to see tbled on real hardware.
 1. **Install the pipeline** (writes the state the widget reads):
 
    ```sh
-   ./bin/tbled install --config-dir ~/.claude-personal
+   ./bin/glowbar install --config-dir ~/.claude-personal
    ```
 
-   This also stages the widget script to `~/.tbled/mtmr/tbled-strip.sh`.
+   This also stages the widget script to `~/.glowbar/mtmr/glowbar-strip.sh`.
 
 2. **Install MTMR**: `brew install --cask mtmr` (or download a release).
 
@@ -27,7 +27,7 @@ fastest way to see tbled on real hardware.
    ```json
    {
      "type": "shellScriptTitledButton",
-     "source": { "filePath": "~/.tbled/mtmr/tbled-strip.sh" },
+     "source": { "filePath": "~/.glowbar/mtmr/glowbar-strip.sh" },
      "refreshInterval": 2,
      "align": "left"
    }
@@ -40,13 +40,13 @@ fastest way to see tbled on real hardware.
 
 ## Tuning
 
-The script honours the same environment overrides as `tbled` (set them in the
+The script honours the same environment overrides as `glowbar` (set them in the
 MTMR launch environment or edit the top of the script):
 
 | Variable              | Default | Meaning                         |
 |-----------------------|---------|---------------------------------|
-| `TBLED_STALE_SECS`    | `1200`  | seconds of inactivity → ⚪       |
-| `TBLED_HIDE_SECS`     | `7200`  | seconds of inactivity → hidden  |
-| `TBLED_NAME_MAXLEN`   | `10`    | truncate names to N glyphs      |
+| `GLOWBAR_STALE_SECS`    | `1200`  | seconds of inactivity → ⚪       |
+| `GLOWBAR_HIDE_SECS`     | `7200`  | seconds of inactivity → hidden  |
+| `GLOWBAR_NAME_MAXLEN`   | `10`    | truncate names to N glyphs      |
 
 When there are no sessions the widget shows `💤`.

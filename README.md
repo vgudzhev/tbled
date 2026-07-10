@@ -1,8 +1,8 @@
-# tbled — Claude Code status lights on the MacBook Pro Touch Bar
+# glowbar — Claude Code status lights on the MacBook Pro Touch Bar
 
 One coloured tile per Claude Code session, live on the Touch Bar (or the menu
 bar, or MTMR). Inspired by [cled](https://github.com/latent-spaces/cled), which
-does the same for RGB keyboards via OpenRGB — tbled adapts the idea to the 2019
+does the same for RGB keyboards via OpenRGB — glowbar adapts the idea to the 2019
 MacBook Pro Touch Bar and drives it from **Claude Code hooks** instead of
 scraping terminals.
 
@@ -25,7 +25,7 @@ scraping terminals.
 - **Smart state detection** — Automatically detects working/waiting/ready/stale states from hook events
 - **Touch Bar + Menu Bar** — Renders on Touch Bar (primary) with menu bar fallback for non-Touch-Bar Macs
 - **Session names** — Tiles show each session's name (honours `/rename`; otherwise Claude's derived name), so two sessions in the same repo stay distinct
-- **Catches every session** — `tbled sync` also reads Claude's own live session files, so sessions started *before* you installed the hooks (or in a config dir without them) still show up (busy/waiting/idle → 🔴/🟡/🟢)
+- **Catches every session** — `glowbar sync` also reads Claude's own live session files, so sessions started *before* you installed the hooks (or in a config dir without them) still show up (busy/waiting/idle → 🔴/🟡/🟢)
 - **Tap to focus** — Click a tile to jump to that session's terminal — Terminal/iTerm select the exact tab; VS Code, IntelliJ and other hosts focus the app window (found by walking the session's process tree). Crosses Spaces and fullscreen via the Accessibility API
 - **Zero overhead** — State stored in files (no daemon), hooks integrate with Claude Code's native event system
 
@@ -35,11 +35,11 @@ Two decoupled halves talking through a state directory — no sockets, no daemon
 
 ```
 Claude Code session(s)                         renderer
-  │ hooks (tbled-hook)                            │ reads
+  │ hooks (glowbar-hook)                            │ reads
   ▼                                               ▼
-~/.tbled/sessions/<session_id>.json  ◄─────  tbled status  (CLI)
+~/.glowbar/sessions/<session_id>.json  ◄─────  glowbar status  (CLI)
                                              MTMR widget    (Touch Bar, today)
-                                             tbled-touchbar (native app)
+                                             glowbar-touchbar (native app)
 ```
 
 Each hook event maps to a state and the hook writes the session's JSON file
@@ -63,19 +63,19 @@ we deliberately *don't* let that flip a red (working) tile to yellow.
 
 ```sh
 # 1. Wire the hooks into whichever Claude config dir(s) you use.
-./bin/tbled install --config-dir ~/.claude-personal --config-dir ~/.claude-work
+./bin/glowbar install --config-dir ~/.claude-personal --config-dir ~/.claude-work
 
 # 2. In another terminal, watch live status:
-watch -n1 ./bin/tbled status      # or: while true; do clear; ./bin/tbled status; sleep 1; done
+watch -n1 ./bin/glowbar status      # or: while true; do clear; ./bin/glowbar status; sleep 1; done
 
 # 3. Start Claude Code sessions in a few repos and watch the colours change.
 ```
 
 `install` backs up each `settings.json` first, is idempotent (safe to re-run),
-and copies `tbled-hook` + `tbled` into `~/.tbled/bin`. Remove everything with:
+and copies `glowbar-hook` + `glowbar` into `~/.glowbar/bin`. Remove everything with:
 
 ```sh
-./bin/tbled uninstall --config-dir ~/.claude-personal --config-dir ~/.claude-work
+./bin/glowbar uninstall --config-dir ~/.claude-personal --config-dir ~/.claude-work
 ```
 
 `install`/`uninstall` default to `$CLAUDE_CONFIG_DIR` (or `~/.claude`) when you
@@ -84,12 +84,12 @@ pass no `--config-dir`.
 ### CLI
 
 ```
-tbled status      pretty-print the live session tiles (auto-runs sync)
-tbled sync        import Claude's own live sessions (works without hooks)
-tbled install     wire hooks into settings.json (backs up, idempotent)
-tbled uninstall   remove them again
-tbled reap        delete session files for dead / expired sessions
-tbled dir         print the state directory (~/.tbled)
+glowbar status      pretty-print the live session tiles (auto-runs sync)
+glowbar sync        import Claude's own live sessions (works without hooks)
+glowbar install     wire hooks into settings.json (backs up, idempotent)
+glowbar uninstall   remove them again
+glowbar reap        delete session files for dead / expired sessions
+glowbar dir         print the state directory (~/.glowbar)
 ```
 
 ## Renderers
@@ -111,29 +111,29 @@ where those entry points are unavailable.
 ```sh
 cd app
 swift build -c release       # needs a working Swift toolchain (see caveat)
-swift run tbled-selftest     # verify the TbledCore logic (works under CLT-only)
+swift run glowbar-selftest     # verify the GlowbarCore logic (works under CLT-only)
 swift test                   # full XCTest suite (needs Xcode for XCTest)
 ```
 
 #### Run it — one-word on/off
 
-`tbled-app` builds and controls the running app. `tbled install` stages it to
-`~/.tbled/bin`; you can also run it straight from `./bin/tbled-app`.
+`glowbar-app` builds and controls the running app. `glowbar install` stages it to
+`~/.glowbar/bin`; you can also run it straight from `./bin/glowbar-app`.
 
 ```sh
-# one-time: build + assemble a signed tbled.app at ~/.tbled/tbled.app
-./bin/tbled-app build ./app
+# one-time: build + assemble a signed glowbar.app at ~/.glowbar/glowbar.app
+./bin/glowbar-app build ./app
 
 # then control it with one word
-tbled-app on                 # launch (Touch Bar tiles + menu-bar mirror)
-tbled-app off                # stop
-tbled-app toggle             # flip on/off
-tbled-app status             # on / off
-tbled-app restart
+glowbar-app on                 # launch (Touch Bar tiles + menu-bar mirror)
+glowbar-app off                # stop
+glowbar-app toggle             # flip on/off
+glowbar-app status             # on / off
+glowbar-app restart
 ```
 
 `build` assembles a minimal, ad-hoc-signed `.app` bundle (stable bundle id
-`com.tbled.touchbar`). The signature matters: a bare `swift build` binary has no
+`com.glowbar.touchbar`). The signature matters: a bare `swift build` binary has no
 stable TCC identity, so macOS won't reliably honour its Accessibility grant —
 the bundle fixes that, and the grant then persists across rebuilds.
 
@@ -142,7 +142,7 @@ app's own bar). For a compact dot in the **Control Strip** (right, by brightness
 instead, set the mode:
 
 ```sh
-TBLED_TOUCHBAR_MODE=strip tbled-app on
+GLOWBAR_TOUCHBAR_MODE=strip glowbar-app on
 ```
 
 #### Permissions (for tap-to-focus)
@@ -150,26 +150,26 @@ TBLED_TOUCHBAR_MODE=strip tbled-app on
 Tap-to-focus asks macOS to bring another app's window forward, which needs:
 
 - **Accessibility** — required to cross Spaces / fullscreen (the `AXRaise`).
-  System Settings → Privacy & Security → **Accessibility** → enable **tbled**.
+  System Settings → Privacy & Security → **Accessibility** → enable **glowbar**.
 - **Automation** — only for selecting the exact Terminal/iTerm tab; prompted on
   first tap. (VS Code / IntelliJ focus needs just Accessibility.)
 
 #### Add to `~/.zshrc`
 
-Put `~/.tbled/bin` on your `PATH` and alias the toggle, so you can flip it from
+Put `~/.glowbar/bin` on your `PATH` and alias the toggle, so you can flip it from
 anywhere by typing `tb`:
 
 ```sh
-# tbled — Touch Bar status lights
-export PATH="$HOME/.tbled/bin:$PATH"
-alias tb='tbled-app toggle'
+# glowbar — Touch Bar status lights
+export PATH="$HOME/.glowbar/bin:$PATH"
+alias tb='glowbar-app toggle'
 ```
 
 Reload with `source ~/.zshrc` (or open a new terminal), then just type **`tb`**.
 For a global hotkey, add a *Run Shell Script* action running
-`$HOME/.tbled/bin/tbled-app toggle` in **Shortcuts.app** and assign it a key.
+`$HOME/.glowbar/bin/glowbar-app toggle` in **Shortcuts.app** and assign it a key.
 
-Auto-start on login via `packaging/com.tbled.app.plist` (a LaunchAgent template).
+Auto-start on login via `packaging/com.glowbar.app.plist` (a LaunchAgent template).
 
 ## Configuration
 
@@ -177,16 +177,16 @@ Thresholds are environment-overridable (read by the CLI and MTMR widget):
 
 | Variable            | Default | Meaning                         |
 |---------------------|---------|---------------------------------|
-| `TBLED_DIR`         | `~/.tbled` | state directory               |
-| `TBLED_STALE_SECS`  | `1200`  | inactivity → dim/stale          |
-| `TBLED_HIDE_SECS`   | `7200`  | inactivity → hidden / reaped    |
+| `GLOWBAR_DIR`         | `~/.glowbar` | state directory               |
+| `GLOWBAR_STALE_SECS`  | `1200`  | inactivity → dim/stale          |
+| `GLOWBAR_HIDE_SECS`   | `7200`  | inactivity → hidden / reaped    |
 
 ## Verification status (what's actually been tested)
 
 Being precise about this, because parts run on hardware I can drive and parts
 don't:
 
-- **Pipeline (`bin/tbled-hook`, `bin/tbled`) — verified.** The full state
+- **Pipeline (`bin/glowbar-hook`, `bin/glowbar`) — verified.** The full state
   machine was exercised with real hook payloads (ready→working→waiting→ready,
   the `agent_completed`-stays-working rule, dedup, stale/dead detection, reap,
   and idempotent install/uninstall that preserves existing hooks). A **real
@@ -204,9 +204,9 @@ don't:
 
 - **Native app — compiles and its logic is tested; Touch Bar rendering not yet
   verified.** The whole package **builds cleanly** (`swift build` → a linked
-  `tbled-touchbar` binary; the ObjC DFR shim compiles and links). `TbledCore`
+  `glowbar-touchbar` binary; the ObjC DFR shim compiles and links). `GlowbarCore`
   (parsing / stale / PID / dedup — the bug-prone part) passes **12/12 checks**
-  via `swift run tbled-selftest`, an XCTest-free runner that works under Command
+  via `swift run glowbar-selftest`, an XCTest-free runner that works under Command
   Line Tools alone. (The XCTest suite in `Tests/` needs full Xcode.) What is
   *not* yet verified is the actual on-screen rendering: the menu-bar mirror and
   the private-API Touch Bar path have not been observed running on this macOS
@@ -216,9 +216,9 @@ don't:
 ## Layout
 
 ```
-bin/tbled-hook        hook handler (one script, all events; atomic writes)
-bin/tbled             CLI: status / install / uninstall / reap / dir
-mtmr/tbled-strip.sh   MTMR Touch Bar widget (+ mtmr/README.md)
-app/                  native SwiftPM Touch Bar app (TbledCore + CDFR shim)
+bin/glowbar-hook        hook handler (one script, all events; atomic writes)
+bin/glowbar             CLI: status / install / uninstall / reap / dir
+mtmr/glowbar-strip.sh   MTMR Touch Bar widget (+ mtmr/README.md)
+app/                  native SwiftPM Touch Bar app (GlowbarCore + CDFR shim)
 packaging/            LaunchAgent template
 ```

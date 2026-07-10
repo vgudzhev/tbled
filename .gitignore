@@ -1,6 +1,6 @@
 app/.build/
 .DS_Store
-*.tbled-backup.*
+*.glowbar-backup.*
 .claude/
 
 # stray artifacts from other tasks/tools that land in this dir

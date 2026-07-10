@@ -1,5 +1,5 @@
 import AppKit
-import TbledCore
+import GlowbarCore
 
 /// The menu-bar mirror: a coloured dot per session in an NSStatusItem, with a
 /// drop-down listing each session. This is the always-works fallback — it needs
@@ -69,7 +69,7 @@ final class MenuBarController: NSObject {
             }
         }
         menu.addItem(.separator())
-        menu.addItem(NSMenuItem(title: "Quit tbled", action: #selector(NSApplication.terminate(_:)),
+        menu.addItem(NSMenuItem(title: "Quit glowbar", action: #selector(NSApplication.terminate(_:)),
                                 keyEquivalent: "q"))
         statusItem.menu = menu
     }

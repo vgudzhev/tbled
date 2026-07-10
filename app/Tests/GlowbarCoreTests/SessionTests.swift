@@ -1,5 +1,5 @@
 import XCTest
-@testable import TbledCore
+@testable import GlowbarCore
 
 final class SessionTests: XCTestCase {
 

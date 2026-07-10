@@ -1,6 +1,6 @@
 import AppKit
 import ApplicationServices
-import TbledCore
+import GlowbarCore
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
 
@@ -17,7 +17,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         store.onChange = { [weak self] rendered in
             self?.menuBar.update(rendered)
             self?.touchBar.update(rendered)
-            if ProcessInfo.processInfo.environment["TBLED_DIAG"] != nil {
+            if ProcessInfo.processInfo.environment["GLOWBAR_DIAG"] != nil {
                 FileHandle.standardError.write(
                     "diag: rendered \(rendered.count) session(s): "
                     .appending(rendered.map { "\($0.label)=\($0.display.rawValue)" }.joined(separator: ", "))
@@ -26,7 +26,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         store.start()
 
-        if ProcessInfo.processInfo.environment["TBLED_DIAG"] != nil {
+        if ProcessInfo.processInfo.environment["GLOWBAR_DIAG"] != nil {
             let msg = "diag: launched. menuBarButton=\(menuBar.hasStatusButton) "
                 + "touchBarDFR=\(touchBar.available) "
                 + "accessibilityTrusted=\(AXIsProcessTrusted()) "

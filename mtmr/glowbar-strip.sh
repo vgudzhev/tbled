@@ -1,23 +1,23 @@
 #!/usr/bin/env bash
 #
-# tbled-strip.sh — renders the live Claude Code sessions as a compact emoji
+# glowbar-strip.sh — renders the live Claude Code sessions as a compact emoji
 # strip for an MTMR (My TouchBar My Rules) shell-script widget.
 #
 #   🔴 my-api  🟡 webapp  🟢 infra
 #
 # MTMR runs this on a timer and shows stdout as a Touch Bar button. It is fully
 # self-contained and fast so it can refresh every 1–2 s. Consumes the same
-# ~/.tbled/sessions state the hooks write — no Swift, no compilation required.
+# ~/.glowbar/sessions state the hooks write — no Swift, no compilation required.
 
-TBLED_DIR="${TBLED_DIR:-$HOME/.tbled}"
-SESSIONS_DIR="$TBLED_DIR/sessions"
-STALE_SECS="${TBLED_STALE_SECS:-1200}"   # 20 min → ⚪
-HIDE_SECS="${TBLED_HIDE_SECS:-7200}"     # 2 h   → hidden
-MAXLEN="${TBLED_NAME_MAXLEN:-10}"
+GLOWBAR_DIR="${GLOWBAR_DIR:-$HOME/.glowbar}"
+SESSIONS_DIR="$GLOWBAR_DIR/sessions"
+STALE_SECS="${GLOWBAR_STALE_SECS:-1200}"   # 20 min → ⚪
+HIDE_SECS="${GLOWBAR_HIDE_SECS:-7200}"     # 2 h   → hidden
+MAXLEN="${GLOWBAR_NAME_MAXLEN:-10}"
 
 # Import Claude's own live sessions (best effort) so any running session shows,
 # even without hooks installed. Creates the sessions dir on first run.
-[ -x "$HOME/.tbled/bin/tbled" ] && "$HOME/.tbled/bin/tbled" sync 2>/dev/null
+[ -x "$HOME/.glowbar/bin/glowbar" ] && "$HOME/.glowbar/bin/glowbar" sync 2>/dev/null
 
 [ -d "$SESSIONS_DIR" ] || { printf '💤'; exit 0; }
 

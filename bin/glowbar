@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 #
-# tbled — CLI for the Touch Bar Claude Code status app.
+# glowbar — CLI for the Touch Bar Claude Code status app.
 #
-#   tbled status                 pretty-print the live sessions
-#   tbled install [--config-dir DIR]...   wire hooks into settings.json
-#   tbled uninstall [--config-dir DIR]... remove them again
-#   tbled reap                   delete session files for dead/expired sessions
-#   tbled dir                    print the state directory
+#   glowbar status                 pretty-print the live sessions
+#   glowbar install [--config-dir DIR]...   wire hooks into settings.json
+#   glowbar uninstall [--config-dir DIR]... remove them again
+#   glowbar reap                   delete session files for dead/expired sessions
+#   glowbar dir                    print the state directory
 #
 # The install/uninstall commands back up settings.json first and are
 # idempotent (safe to re-run). By default they target $CLAUDE_CONFIG_DIR,
@@ -15,13 +15,13 @@
 
 set -euo pipefail
 
-TBLED_DIR="${TBLED_DIR:-$HOME/.tbled}"
-SESSIONS_DIR="$TBLED_DIR/sessions"
-BIN_DIR="$TBLED_DIR/bin"
+GLOWBAR_DIR="${GLOWBAR_DIR:-$HOME/.glowbar}"
+SESSIONS_DIR="$GLOWBAR_DIR/sessions"
+BIN_DIR="$GLOWBAR_DIR/bin"
 
 # Stale / hide thresholds (seconds). Overridable via env for tests.
-STALE_SECS="${TBLED_STALE_SECS:-1200}"   # 20 min → dim
-HIDE_SECS="${TBLED_HIDE_SECS:-7200}"     # 2 h   → hide/reap
+STALE_SECS="${GLOWBAR_STALE_SECS:-1200}"   # 20 min → dim
+HIDE_SECS="${GLOWBAR_HIDE_SECS:-7200}"     # 2 h   → hide/reap
 
 # Hook events we register. Order is cosmetic.
 EVENTS='["SessionStart","UserPromptSubmit","PreToolUse","PostToolUse","PostToolBatch","PostToolUseFailure","Notification","Stop","SessionEnd"]'
@@ -29,7 +29,7 @@ EVENTS='["SessionStart","UserPromptSubmit","PreToolUse","PostToolUse","PostToolB
 c_red=$'\033[31m'; c_yellow=$'\033[33m'; c_green=$'\033[32m'
 c_dim=$'\033[2m';  c_bold=$'\033[1m';   c_reset=$'\033[0m'
 
-die() { printf 'tbled: %s\n' "$*" >&2; exit 1; }
+die() { printf 'glowbar: %s\n' "$*" >&2; exit 1; }
 
 now_epoch() { date -u +%s; }
 
@@ -43,7 +43,7 @@ pid_alive() { [ "$1" -gt 0 ] 2>/dev/null && kill -0 "$1" 2>/dev/null; }
 # ---- sync -----------------------------------------------------------------
 # Bridge Claude Code's own per-session files (<config>/sessions/<pid>.json,
 # which it maintains for EVERY live session with a busy/waiting/idle status)
-# into tbled's state dir. This makes sessions visible even when they predate the
+# into glowbar's state dir. This makes sessions visible even when they predate the
 # hook install or run in a config dir without hooks. Hook-owned records (precise
 # working/waiting/ready) are never clobbered — sync only fills the gaps.
 
@@ -209,7 +209,7 @@ default_config_dirs() {
   fi
 }
 
-# Resolve the absolute dir this script lives in (so we can find tbled-hook).
+# Resolve the absolute dir this script lives in (so we can find glowbar-hook).
 script_dir() {
   local src="${BASH_SOURCE[0]}"
   while [ -h "$src" ]; do src="$(readlink "$src")"; done
@@ -219,16 +219,16 @@ script_dir() {
 install_bins() {
   mkdir -p "$BIN_DIR"
   local src; src="$(script_dir)"
-  install -m 0755 "$src/tbled-hook" "$BIN_DIR/tbled-hook"
-  install -m 0755 "$src/tbled"      "$BIN_DIR/tbled"
+  install -m 0755 "$src/glowbar-hook" "$BIN_DIR/glowbar-hook"
+  install -m 0755 "$src/glowbar"      "$BIN_DIR/glowbar"
   # Stage the native-app on/off control script, if it ships alongside.
-  [ -f "$src/tbled-app" ] && install -m 0755 "$src/tbled-app" "$BIN_DIR/tbled-app"
+  [ -f "$src/glowbar-app" ] && install -m 0755 "$src/glowbar-app" "$BIN_DIR/glowbar-app"
   # Stage the MTMR widget to a stable path too, if it ships alongside.
-  if [ -f "$src/../mtmr/tbled-strip.sh" ]; then
-    mkdir -p "$TBLED_DIR/mtmr"
-    install -m 0755 "$src/../mtmr/tbled-strip.sh" "$TBLED_DIR/mtmr/tbled-strip.sh"
+  if [ -f "$src/../mtmr/glowbar-strip.sh" ]; then
+    mkdir -p "$GLOWBAR_DIR/mtmr"
+    install -m 0755 "$src/../mtmr/glowbar-strip.sh" "$GLOWBAR_DIR/mtmr/glowbar-strip.sh"
   fi
-  printf '%s/tbled-hook' "$BIN_DIR"
+  printf '%s/glowbar-hook' "$BIN_DIR"
 }
 
 merge_hooks() {
@@ -291,7 +291,7 @@ cmd_install() {
     [ -d "$d" ] || { printf '%sskip %s (no such config dir)%s\n' "$c_dim" "$d" "$c_reset"; continue; }
     local settings="$d/settings.json"
     if [ -f "$settings" ]; then
-      local bak="$settings.tbled-backup.$(date +%Y%m%d%H%M%S)"
+      local bak="$settings.glowbar-backup.$(date +%Y%m%d%H%M%S)"
       cp "$settings" "$bak"
       printf 'backed up %s → %s\n' "$settings" "$(basename "$bak")"
     fi
@@ -299,7 +299,7 @@ cmd_install() {
     printf '%s✓ wired hooks into %s%s\n' "$c_green" "$settings" "$c_reset"
   done
   printf '\nDone. New Claude Code sessions in these config dirs will report status.\n'
-  printf 'Try: %stbled status%s in another terminal while a session runs.\n' "$c_bold" "$c_reset"
+  printf 'Try: %sglowbar status%s in another terminal while a session runs.\n' "$c_bold" "$c_reset"
 }
 
 cmd_uninstall() {
@@ -315,31 +315,31 @@ cmd_uninstall() {
     while IFS= read -r line; do dirs+=("$line"); done < <(default_config_dirs)
   fi
 
-  local hook="$BIN_DIR/tbled-hook"
+  local hook="$BIN_DIR/glowbar-hook"
   local d
   for d in "${dirs[@]}"; do
     local settings="$d/settings.json"
     [ -f "$settings" ] || continue
-    local bak="$settings.tbled-backup.$(date +%Y%m%d%H%M%S)"
+    local bak="$settings.glowbar-backup.$(date +%Y%m%d%H%M%S)"
     cp "$settings" "$bak"
     strip_hooks "$settings" "$hook"
     printf '%s✓ removed hooks from %s%s (backup: %s)\n' "$c_green" "$settings" "$c_reset" "$(basename "$bak")"
   done
-  printf 'Hooks removed. The %s directory was left in place.\n' "$TBLED_DIR"
+  printf 'Hooks removed. The %s directory was left in place.\n' "$GLOWBAR_DIR"
 }
 
 usage() {
   cat <<'EOF'
-tbled — Touch Bar status lights for Claude Code
+glowbar — Touch Bar status lights for Claude Code
 
 USAGE:
-  tbled status                          show live session tiles
-  tbled sync                            import Claude's own live sessions (any
+  glowbar status                          show live session tiles
+  glowbar sync                            import Claude's own live sessions (any
                                         session, even without hooks installed)
-  tbled install   [--config-dir DIR]…   wire hooks into settings.json
-  tbled uninstall [--config-dir DIR]…   remove them again
-  tbled reap                            delete dead/expired session files
-  tbled dir                             print the state directory
+  glowbar install   [--config-dir DIR]…   wire hooks into settings.json
+  glowbar uninstall [--config-dir DIR]…   remove them again
+  glowbar reap                            delete dead/expired session files
+  glowbar dir                             print the state directory
 
 Defaults to $CLAUDE_CONFIG_DIR (or ~/.claude). Pass --config-dir one or more
 times to target ~/.claude-personal, ~/.claude-work, etc.
@@ -354,9 +354,9 @@ main() {
     reap)      cmd_reap "$@" ;;
     install)   cmd_install "$@" ;;
     uninstall) cmd_uninstall "$@" ;;
-    dir)       printf '%s\n' "$TBLED_DIR" ;;
+    dir)       printf '%s\n' "$GLOWBAR_DIR" ;;
     -h|--help|help) usage ;;
-    *) die "unknown command: $cmd (try 'tbled help')" ;;
+    *) die "unknown command: $cmd (try 'glowbar help')" ;;
   esac
 }
 

@@ -1,6 +1,6 @@
 import AppKit
 import ApplicationServices
-import TbledCore
+import GlowbarCore
 
 /// Tap-to-focus: bring the app hosting a session to the front, crossing Spaces
 /// / fullscreen, and — for Terminal & iTerm — selecting the exact tab.
@@ -14,7 +14,7 @@ import TbledCore
 ///
 /// Permissions: **Automation** for the Terminal/iTerm tab-selection AppleScript
 /// (prompted on first use), and **Accessibility** for the `AXRaise` that pulls
-/// a window out of another Space / fullscreen. Grant both to `tbled.app`.
+/// a window out of another Space / fullscreen. Grant both to `glowbar.app`.
 enum FocusService {
 
     private static var promptedAX = false
@@ -159,7 +159,7 @@ enum FocusService {
     private static func runAppleScript(_ source: String) {
         var error: NSDictionary?
         NSAppleScript(source: source)?.executeAndReturnError(&error)
-        if let error = error, ProcessInfo.processInfo.environment["TBLED_DIAG"] != nil {
+        if let error = error, ProcessInfo.processInfo.environment["GLOWBAR_DIAG"] != nil {
             FileHandle.standardError.write("focus AppleScript error: \(error)\n".data(using: .utf8)!)
         }
     }

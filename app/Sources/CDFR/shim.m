@@ -3,10 +3,10 @@
 
 // --- Private DFRFoundation C functions, resolved at runtime via dlsym -------
 
-typedef void (*TBLEDSetPresenceFn)(NSString *, BOOL);
-typedef void (*TBLEDShowCloseBoxFn)(BOOL);
+typedef void (*GLOWBARSetPresenceFn)(NSString *, BOOL);
+typedef void (*GLOWBARShowCloseBoxFn)(BOOL);
 
-static void *TBLEDDFRHandle(void) {
+static void *GLOWBARDFRHandle(void) {
     static void *handle;
     static dispatch_once_t once;
     dispatch_once(&once, ^{
@@ -16,21 +16,21 @@ static void *TBLEDDFRHandle(void) {
     return handle;
 }
 
-BOOL TBLEDDFRAvailable(void) { return TBLEDDFRHandle() != NULL; }
+BOOL GLOWBARDFRAvailable(void) { return GLOWBARDFRHandle() != NULL; }
 
-void TBLEDSetControlStripPresence(NSString *identifier, BOOL present) {
-    void *h = TBLEDDFRHandle();
+void GLOWBARSetControlStripPresence(NSString *identifier, BOOL present) {
+    void *h = GLOWBARDFRHandle();
     if (!h) return;
-    TBLEDSetPresenceFn fn =
-        (TBLEDSetPresenceFn)dlsym(h, "DFRElementSetControlStripPresenceForIdentifier");
+    GLOWBARSetPresenceFn fn =
+        (GLOWBARSetPresenceFn)dlsym(h, "DFRElementSetControlStripPresenceForIdentifier");
     if (fn) fn(identifier, present);
 }
 
-void TBLEDShowCloseBox(BOOL show) {
-    void *h = TBLEDDFRHandle();
+void GLOWBARShowCloseBox(BOOL show) {
+    void *h = GLOWBARDFRHandle();
     if (!h) return;
-    TBLEDShowCloseBoxFn fn =
-        (TBLEDShowCloseBoxFn)dlsym(h, "DFRSystemModalShowsCloseBoxWhenFrontMost");
+    GLOWBARShowCloseBoxFn fn =
+        (GLOWBARShowCloseBoxFn)dlsym(h, "DFRSystemModalShowsCloseBoxWhenFrontMost");
     if (fn) fn(show);
 }
 
@@ -38,30 +38,30 @@ void TBLEDShowCloseBox(BOOL show) {
 // Declared here so the compiler is happy; guarded with respondsToSelector: so
 // they degrade to no-ops if Apple renames or removes them (e.g. newer macOS).
 
-@interface NSTouchBarItem (TBLEDPrivate)
+@interface NSTouchBarItem (GLOWBARPrivate)
 + (void)addSystemTrayItem:(NSTouchBarItem *)item;
 @end
 
-@interface NSTouchBar (TBLEDPrivate)
+@interface NSTouchBar (GLOWBARPrivate)
 + (void)presentSystemModalTouchBar:(NSTouchBar *)touchBar
           systemTrayItemIdentifier:(NSString *)identifier;
 + (void)dismissSystemModalTouchBar:(NSTouchBar *)touchBar;
 @end
 
-void TBLEDAddSystemTrayItem(NSTouchBarItem *item) {
+void GLOWBARAddSystemTrayItem(NSTouchBarItem *item) {
     if ([NSTouchBarItem respondsToSelector:@selector(addSystemTrayItem:)]) {
         [NSTouchBarItem addSystemTrayItem:item];
     }
 }
 
-void TBLEDPresentSystemModal(NSTouchBar *bar, NSString *identifier) {
+void GLOWBARPresentSystemModal(NSTouchBar *bar, NSString *identifier) {
     SEL sel = @selector(presentSystemModalTouchBar:systemTrayItemIdentifier:);
     if ([NSTouchBar respondsToSelector:sel]) {
         [NSTouchBar presentSystemModalTouchBar:bar systemTrayItemIdentifier:identifier];
     }
 }
 
-void TBLEDDismissSystemModal(NSTouchBar *bar) {
+void GLOWBARDismissSystemModal(NSTouchBar *bar) {
     if ([NSTouchBar respondsToSelector:@selector(dismissSystemModalTouchBar:)]) {
         [NSTouchBar dismissSystemModalTouchBar:bar];
     }

@@ -1,5 +1,5 @@
 import AppKit
-import TbledCore
+import GlowbarCore
 
 /// A single rounded Touch Bar tile: a state-coloured rectangle with the session
 /// name. Tapping it asks the FocusService to bring the owning terminal forward.

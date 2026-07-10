@@ -1,8 +1,8 @@
 import AppKit
-import TbledCore
+import GlowbarCore
 import CDFR
 
-/// Owns the tbled Touch Bar presence. Two modes (env `TBLED_TOUCHBAR_MODE`):
+/// Owns the glowbar Touch Bar presence. Two modes (env `GLOWBAR_TOUCHBAR_MODE`):
 ///
 ///  * `app`  (default) — take over the **app region** (the left/main part of the
 ///    Touch Bar), persistently, *instead of* each focused app's own Touch Bar
@@ -20,8 +20,8 @@ final class TouchBarController: NSObject, NSTouchBarDelegate {
 
     enum Mode { case appRegion, controlStrip }
 
-    static let trayIdentifier = NSTouchBarItem.Identifier("com.tbled.controlStrip")
-    static let stripIdentifier = NSTouchBarItem.Identifier("com.tbled.strip")
+    static let trayIdentifier = NSTouchBarItem.Identifier("com.glowbar.controlStrip")
+    static let stripIdentifier = NSTouchBarItem.Identifier("com.glowbar.strip")
 
     private var sessions: [RenderedSession] = []
     private var summaryView: NSStackView?      // control-strip dot cluster
@@ -31,10 +31,10 @@ final class TouchBarController: NSObject, NSTouchBarDelegate {
 
     let mode: Mode
     /// Whether the Touch Bar path is even usable on this machine.
-    let available: Bool = TBLEDDFRAvailable()
+    let available: Bool = GLOWBARDFRAvailable()
 
     override init() {
-        switch ProcessInfo.processInfo.environment["TBLED_TOUCHBAR_MODE"] {
+        switch ProcessInfo.processInfo.environment["GLOWBAR_TOUCHBAR_MODE"] {
         case "strip": mode = .controlStrip
         default:      mode = .appRegion
         }
@@ -43,16 +43,16 @@ final class TouchBarController: NSObject, NSTouchBarDelegate {
 
     func install() {
         guard available else { return }
-        TBLEDAddSystemTrayItem(trayItem)
+        GLOWBARAddSystemTrayItem(trayItem)
         switch mode {
         case .controlStrip:
             // A persistent dot cluster on the right; tap expands the full strip.
-            TBLEDSetControlStripPresence(Self.trayIdentifier.rawValue, true)
+            GLOWBARSetControlStripPresence(Self.trayIdentifier.rawValue, true)
         case .appRegion:
             // Occupy the app region persistently. Keep the tray registration as
             // the anchor but don't light up the strip dot; no close box.
-            TBLEDSetControlStripPresence(Self.trayIdentifier.rawValue, false)
-            TBLEDShowCloseBox(false)
+            GLOWBARSetControlStripPresence(Self.trayIdentifier.rawValue, false)
+            GLOWBARShowCloseBox(false)
             presentAppRegion()
             // Re-claim the app region whenever another app takes focus (and thus
             // installs its own Touch Bar), or after wake — same as Pock.
@@ -67,7 +67,7 @@ final class TouchBarController: NSObject, NSTouchBarDelegate {
     func reassert() {
         guard available else { return }
         switch mode {
-        case .controlStrip: TBLEDSetControlStripPresence(Self.trayIdentifier.rawValue, true)
+        case .controlStrip: GLOWBARSetControlStripPresence(Self.trayIdentifier.rawValue, true)
         case .appRegion:    presentAppRegion()
         }
     }
@@ -127,14 +127,14 @@ final class TouchBarController: NSObject, NSTouchBarDelegate {
     /// repeatedly — the system replaces the current presentation.
     @objc private func presentAppRegion() {
         guard available, mode == .appRegion else { return }
-        TBLEDPresentSystemModal(modalBar, Self.trayIdentifier.rawValue)
+        GLOWBARPresentSystemModal(modalBar, Self.trayIdentifier.rawValue)
     }
 
     /// Control-strip mode: tap the dot cluster to expand the full strip.
     @objc private func present() {
         guard available, mode == .controlStrip else { return }
-        TBLEDShowCloseBox(true)
-        TBLEDPresentSystemModal(modalBar, Self.trayIdentifier.rawValue)
+        GLOWBARShowCloseBox(true)
+        GLOWBARPresentSystemModal(modalBar, Self.trayIdentifier.rawValue)
     }
 
     /// Update the live strip view in place, so we don't have to re-present on

@@ -1,9 +1,9 @@
 import Foundation
-import TbledCore
+import GlowbarCore
 
-// A dependency-free mirror of TbledCoreTests, runnable under Command Line Tools
+// A dependency-free mirror of GlowbarCoreTests, runnable under Command Line Tools
 // (which lack XCTest). Exercises the same parsing / stale / dedup / PID logic
-// through TbledCore's public API. Exits non-zero on the first failure.
+// through GlowbarCore's public API. Exits non-zero on the first failure.
 
 var failures = 0
 func check(_ label: String, _ cond: Bool) {

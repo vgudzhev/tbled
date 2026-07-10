@@ -1,7 +1,7 @@
 import Foundation
-import TbledCore
+import GlowbarCore
 
-/// Watches the `~/.tbled/sessions` directory and publishes the rendered set of
+/// Watches the `~/.glowbar/sessions` directory and publishes the rendered set of
 /// sessions. Uses a kqueue directory source (fires when hooks `mv` a file in or
 /// out) plus a 2-second timer that both serves as a fallback and re-evaluates
 /// time-based stale transitions. Callbacks are debounced ~120 ms and delivered
@@ -17,10 +17,10 @@ final class SessionStore {
     private var timer: DispatchSourceTimer?
     private var debounce: DispatchWorkItem?
     private var last: [RenderedSession] = []
-    private let queue = DispatchQueue(label: "tbled.sessionstore")
+    private let queue = DispatchQueue(label: "glowbar.sessionstore")
 
     init(root: URL? = nil, thresholds: StaleThresholds = StaleThresholds()) {
-        let base = root ?? URL(fileURLWithPath: NSString(string: "~/.tbled").expandingTildeInPath)
+        let base = root ?? URL(fileURLWithPath: NSString(string: "~/.glowbar").expandingTildeInPath)
         self.sessionsDir = base.appendingPathComponent("sessions")
         self.thresholds = thresholds
     }
@@ -65,7 +65,7 @@ final class SessionStore {
                 self.startDirectorySource()
             }
             // Pull in any sessions Claude knows about but hooks missed (e.g.
-            // started before install). `tbled sync` writes them into our dir.
+            // started before install). `glowbar sync` writes them into our dir.
             self.runSync()
             self.reload()
         }
@@ -80,12 +80,12 @@ final class SessionStore {
         queue.asyncAfter(deadline: .now() + 0.12, execute: work)
     }
 
-    /// Run `tbled sync` (best effort) to import Claude's own live sessions.
+    /// Run `glowbar sync` (best effort) to import Claude's own live sessions.
     private func runSync() {
-        let tbled = (("~/.tbled/bin/tbled") as NSString).expandingTildeInPath
-        guard FileManager.default.isExecutableFile(atPath: tbled) else { return }
+        let glowbar = (("~/.glowbar/bin/glowbar") as NSString).expandingTildeInPath
+        guard FileManager.default.isExecutableFile(atPath: glowbar) else { return }
         let p = Process()
-        p.executableURL = URL(fileURLWithPath: tbled)
+        p.executableURL = URL(fileURLWithPath: glowbar)
         p.arguments = ["sync"]
         p.standardOutput = FileHandle.nullDevice
         p.standardError = FileHandle.nullDevice

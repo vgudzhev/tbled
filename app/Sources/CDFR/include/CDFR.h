@@ -9,19 +9,19 @@
 #import <AppKit/AppKit.h>
 
 /// YES if the private DFRFoundation framework could be loaded on this system.
-BOOL TBLEDDFRAvailable(void);
+BOOL GLOWBARDFRAvailable(void);
 
 /// Show/hide a control-strip item with the given identifier (persistent tile).
-void TBLEDSetControlStripPresence(NSString *identifier, BOOL present);
+void GLOWBARSetControlStripPresence(NSString *identifier, BOOL present);
 
 /// Whether the system-modal Touch Bar shows a close box when frontmost.
-void TBLEDShowCloseBox(BOOL show);
+void GLOWBARShowCloseBox(BOOL show);
 
 /// Register a Touch Bar item as a system-tray (control strip) item.
-void TBLEDAddSystemTrayItem(NSTouchBarItem *item);
+void GLOWBARAddSystemTrayItem(NSTouchBarItem *item);
 
 /// Present a full Touch Bar modally, anchored to the given tray identifier.
-void TBLEDPresentSystemModal(NSTouchBar *bar, NSString *identifier);
+void GLOWBARPresentSystemModal(NSTouchBar *bar, NSString *identifier);
 
 /// Dismiss a previously presented system-modal Touch Bar.
-void TBLEDDismissSystemModal(NSTouchBar *bar);
+void GLOWBARDismissSystemModal(NSTouchBar *bar);

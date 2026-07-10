@@ -1,6 +1,6 @@
 import Foundation
 
-/// State a session reports, as written by the `tbled-hook` shell hook.
+/// State a session reports, as written by the `glowbar-hook` shell hook.
 public enum SessionState: String, Codable {
     case working   // 🔴 mid-turn (prompt submitted, tools running)
     case waiting   // 🟡 blocked on the user (permission prompt / question)
@@ -35,7 +35,7 @@ public struct TermInfo: Codable, Equatable {
     }
 }
 
-/// One `~/.tbled/sessions/<id>.json` record.
+/// One `~/.glowbar/sessions/<id>.json` record.
 public struct Session: Codable, Equatable {
     public let sessionId: String
     public let name: String

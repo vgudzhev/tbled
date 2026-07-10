@@ -1,31 +1,31 @@
 #!/usr/bin/env bash
 #
-# tbled-app — start/stop the native Touch Bar app with one word.
+# glowbar-app — start/stop the native Touch Bar app with one word.
 #
-#   tbled-app on          launch it (if not already running)
-#   tbled-app off         stop it
-#   tbled-app toggle      flip on/off  ← bind this to an alias or hotkey
-#   tbled-app restart     stop then start
-#   tbled-app status      is it running?
-#   tbled-app build DIR   (re)build from the SwiftPM package at DIR/ and stage it
+#   glowbar-app on          launch it (if not already running)
+#   glowbar-app off         stop it
+#   glowbar-app toggle      flip on/off  ← bind this to an alias or hotkey
+#   glowbar-app restart     stop then start
+#   glowbar-app status      is it running?
+#   glowbar-app build DIR   (re)build from the SwiftPM package at DIR/ and stage it
 #
-# Honours TBLED_TOUCHBAR_MODE (app|strip) and TBLED_DIAG from the environment.
-# The built binary is staged at $TBLED_DIR/bin/tbled-touchbar so this works from
+# Honours GLOWBAR_TOUCHBAR_MODE (app|strip) and GLOWBAR_DIAG from the environment.
+# The built binary is staged at $GLOWBAR_DIR/bin/glowbar-touchbar so this works from
 # anywhere once installed.
 
 set -euo pipefail
 
-TBLED_DIR="${TBLED_DIR:-$HOME/.tbled}"
-APP_BUNDLE="$TBLED_DIR/tbled.app"
+GLOWBAR_DIR="${GLOWBAR_DIR:-$HOME/.glowbar}"
+APP_BUNDLE="$GLOWBAR_DIR/glowbar.app"
 # Prefer the signed .app bundle (stable identity so Accessibility/Automation
 # grants persist); fall back to the bare staged binary.
-if [ -x "$APP_BUNDLE/Contents/MacOS/tbled-touchbar" ]; then
-  BIN="$APP_BUNDLE/Contents/MacOS/tbled-touchbar"
+if [ -x "$APP_BUNDLE/Contents/MacOS/glowbar-touchbar" ]; then
+  BIN="$APP_BUNDLE/Contents/MacOS/glowbar-touchbar"
 else
-  BIN="$TBLED_DIR/bin/tbled-touchbar"
+  BIN="$GLOWBAR_DIR/bin/glowbar-touchbar"
 fi
-PIDFILE="$TBLED_DIR/app.pid"
-LOG="$TBLED_DIR/app.log"
+PIDFILE="$GLOWBAR_DIR/app.pid"
+LOG="$GLOWBAR_DIR/app.log"
 
 running_pid() {
   [ -f "$PIDFILE" ] || return 1
@@ -36,17 +36,17 @@ running_pid() {
 
 cmd_on() {
   if pid="$(running_pid)"; then
-    echo "tbled app already running (pid $pid)"; return 0
+    echo "glowbar app already running (pid $pid)"; return 0
   fi
-  [ -x "$BIN" ] || { echo "no app binary at $BIN — run: tbled-app build /path/to/app" >&2; exit 1; }
-  mkdir -p "$TBLED_DIR"
+  [ -x "$BIN" ] || { echo "no app binary at $BIN — run: glowbar-app build /path/to/app" >&2; exit 1; }
+  mkdir -p "$GLOWBAR_DIR"
   nohup "$BIN" >"$LOG" 2>&1 &
   echo $! > "$PIDFILE"
   sleep 1
   if pid="$(running_pid)"; then
-    echo "tbled app on (pid $pid, mode ${TBLED_TOUCHBAR_MODE:-app})"
+    echo "glowbar app on (pid $pid, mode ${GLOWBAR_TOUCHBAR_MODE:-app})"
   else
-    echo "tbled app failed to start — see $LOG" >&2; exit 1
+    echo "glowbar app failed to start — see $LOG" >&2; exit 1
   fi
 }
 
@@ -54,9 +54,9 @@ cmd_off() {
   if pid="$(running_pid)"; then
     kill "$pid" 2>/dev/null || true
     rm -f "$PIDFILE"
-    echo "tbled app off"
+    echo "glowbar app off"
   else
-    echo "tbled app not running"
+    echo "glowbar app not running"
   fi
 }
 
@@ -66,14 +66,14 @@ cmd_status() {
 
 cmd_build() {
   local src="${1:-}"
-  [ -n "$src" ] || { echo "usage: tbled-app build /path/to/app" >&2; exit 1; }
+  [ -n "$src" ] || { echo "usage: glowbar-app build /path/to/app" >&2; exit 1; }
   [ -f "$src/Package.swift" ] || { echo "no Package.swift in $src" >&2; exit 1; }
   echo "building (release)…"
   swift build -c release --package-path "$src"
-  local built="$src/.build/release/tbled-touchbar"
+  local built="$src/.build/release/glowbar-touchbar"
   # stage the bare binary (fallback) and a signed .app bundle (stable identity)
-  mkdir -p "$TBLED_DIR/bin"
-  install -m 0755 "$built" "$TBLED_DIR/bin/tbled-touchbar"
+  mkdir -p "$GLOWBAR_DIR/bin"
+  install -m 0755 "$built" "$GLOWBAR_DIR/bin/glowbar-touchbar"
   make_bundle "$built"
   echo "staged → $APP_BUNDLE"
 }
@@ -85,27 +85,27 @@ make_bundle() {
   local built="$1"
   rm -rf "$APP_BUNDLE"
   mkdir -p "$APP_BUNDLE/Contents/MacOS"
-  install -m 0755 "$built" "$APP_BUNDLE/Contents/MacOS/tbled-touchbar"
+  install -m 0755 "$built" "$APP_BUNDLE/Contents/MacOS/glowbar-touchbar"
   cat > "$APP_BUNDLE/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-  <key>CFBundleName</key><string>tbled</string>
-  <key>CFBundleDisplayName</key><string>tbled</string>
-  <key>CFBundleIdentifier</key><string>com.tbled.touchbar</string>
-  <key>CFBundleExecutable</key><string>tbled-touchbar</string>
+  <key>CFBundleName</key><string>glowbar</string>
+  <key>CFBundleDisplayName</key><string>glowbar</string>
+  <key>CFBundleIdentifier</key><string>com.glowbar.touchbar</string>
+  <key>CFBundleExecutable</key><string>glowbar-touchbar</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleShortVersionString</key><string>1.0</string>
   <key>CFBundleVersion</key><string>1</string>
   <key>LSUIElement</key><true/>
   <key>LSMinimumSystemVersion</key><string>11.0</string>
-  <key>NSAppleEventsUsageDescription</key><string>tbled focuses the terminal running a Claude Code session.</string>
+  <key>NSAppleEventsUsageDescription</key><string>glowbar focuses the terminal running a Claude Code session.</string>
 </dict>
 </plist>
 PLIST
   # Ad-hoc sign with a fixed identifier so the TCC entry stays associated.
-  codesign --force --sign - --identifier com.tbled.touchbar "$APP_BUNDLE" >/dev/null 2>&1 \
+  codesign --force --sign - --identifier com.glowbar.touchbar "$APP_BUNDLE" >/dev/null 2>&1 \
     || echo "warning: codesign failed (Accessibility grant may not stick)" >&2
 }
 
@@ -116,5 +116,5 @@ case "${1:-toggle}" in
   restart) cmd_off; cmd_on ;;
   status)  cmd_status ;;
   build)   shift; cmd_build "$@" ;;
-  *) echo "usage: tbled-app {on|off|toggle|restart|status|build DIR}" >&2; exit 1 ;;
+  *) echo "usage: glowbar-app {on|off|toggle|restart|status|build DIR}" >&2; exit 1 ;;
 esac
