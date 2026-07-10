@@ -26,7 +26,7 @@ scraping terminals.
 - **Touch Bar + Menu Bar** — Renders on Touch Bar (primary) with menu bar fallback for non-Touch-Bar Macs
 - **Session names** — Tiles show each session's name (honours `/rename`; otherwise Claude's derived name), so two sessions in the same repo stay distinct
 - **Catches every session** — `tbled sync` also reads Claude's own live session files, so sessions started *before* you installed the hooks (or in a config dir without them) still show up (busy/waiting/idle → 🔴/🟡/🟢)
-- **Tap to focus** — Click a tile to jump directly to that session's terminal tab
+- **Tap to focus** — Click a tile to jump to that session's terminal — Terminal/iTerm select the exact tab; VS Code, IntelliJ and other hosts focus the app window (found by walking the session's process tree). Crosses Spaces and fullscreen via the Accessibility API
 - **Zero overhead** — State stored in files (no daemon), hooks integrate with Claude Code's native event system
 
 ## How it works
@@ -117,11 +117,11 @@ swift test                   # full XCTest suite (needs Xcode for XCTest)
 
 #### Run it — one-word on/off
 
-`tbled-app` builds/stages the binary and controls the running app. `tbled install`
-stages it to `~/.tbled/bin`; you can also run it straight from `./bin/tbled-app`.
+`tbled-app` builds and controls the running app. `tbled install` stages it to
+`~/.tbled/bin`; you can also run it straight from `./bin/tbled-app`.
 
 ```sh
-# one-time: build a release binary and stage it to ~/.tbled/bin/tbled-touchbar
+# one-time: build + assemble a signed tbled.app at ~/.tbled/tbled.app
 ./bin/tbled-app build ./app
 
 # then control it with one word
@@ -132,6 +132,11 @@ tbled-app status             # on / off
 tbled-app restart
 ```
 
+`build` assembles a minimal, ad-hoc-signed `.app` bundle (stable bundle id
+`com.tbled.touchbar`). The signature matters: a bare `swift build` binary has no
+stable TCC identity, so macOS won't reliably honour its Accessibility grant —
+the bundle fixes that, and the grant then persists across rebuilds.
+
 By default it takes over the Touch Bar's **app region** (replacing the focused
 app's own bar). For a compact dot in the **Control Strip** (right, by brightness)
 instead, set the mode:
@@ -139,6 +144,15 @@ instead, set the mode:
 ```sh
 TBLED_TOUCHBAR_MODE=strip tbled-app on
 ```
+
+#### Permissions (for tap-to-focus)
+
+Tap-to-focus asks macOS to bring another app's window forward, which needs:
+
+- **Accessibility** — required to cross Spaces / fullscreen (the `AXRaise`).
+  System Settings → Privacy & Security → **Accessibility** → enable **tbled**.
+- **Automation** — only for selecting the exact Terminal/iTerm tab; prompted on
+  first tap. (VS Code / IntelliJ focus needs just Accessibility.)
 
 #### Add to `~/.zshrc`
 
