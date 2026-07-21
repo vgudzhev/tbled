@@ -47,9 +47,12 @@ cleanup() { rm -rf "$TMP"; }
 trap cleanup EXIT
 
 step "Fetching glowbar…"
-if [ -f "$(dirname "${BASH_SOURCE[0]}")/bin/glowbar" ] 2>/dev/null; then
+# When piped (`curl … | bash`) there is no source file, so BASH_SOURCE is unset —
+# guard it under `set -u` or the script aborts here. Empty → not a checkout → clone.
+self="${BASH_SOURCE[0]:-}"
+if [ -n "$self" ] && [ -f "$(dirname "$self")/bin/glowbar" ]; then
   # Running from inside a checkout (e.g. ./install.sh) — use it directly.
-  SRC="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  SRC="$(cd "$(dirname "$self")" && pwd)"
   ok "using local checkout at $SRC"
 else
   git clone --depth 1 --branch "$REF" "$REPO" "$TMP/glowbar" >/dev/null 2>&1 \
