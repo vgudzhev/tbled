@@ -69,8 +69,13 @@ cmd_build() {
   [ -n "$src" ] || { echo "usage: glowbar-app build /path/to/app" >&2; exit 1; }
   [ -f "$src/Package.swift" ] || { echo "no Package.swift in $src" >&2; exit 1; }
   echo "building (release)…"
-  swift build -c release --package-path "$src"
-  local built="$src/.build/release/glowbar-touchbar"
+  # Redirect the build dir to a writable scratch path under $GLOWBAR_DIR: the
+  # source may live in a read-only location (e.g. a Homebrew Cellar), so we must
+  # not write .build/ inside it.
+  local scratch="$GLOWBAR_DIR/build"
+  mkdir -p "$scratch"
+  swift build -c release --package-path "$src" --scratch-path "$scratch"
+  local built="$scratch/release/glowbar-touchbar"
   # stage the bare binary (fallback) and a signed .app bundle (stable identity)
   mkdir -p "$GLOWBAR_DIR/bin"
   install -m 0755 "$built" "$GLOWBAR_DIR/bin/glowbar-touchbar"

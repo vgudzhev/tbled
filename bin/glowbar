@@ -210,9 +210,16 @@ default_config_dirs() {
 }
 
 # Resolve the absolute dir this script lives in (so we can find glowbar-hook).
+# Follows symlinks, including *relative* ones — Homebrew links bin/glowbar as a
+# relative symlink into the Cellar, so each hop must be re-anchored to the link's
+# own directory or the chain resolves against the caller's CWD and breaks.
 script_dir() {
-  local src="${BASH_SOURCE[0]}"
-  while [ -h "$src" ]; do src="$(readlink "$src")"; done
+  local src="${BASH_SOURCE[0]}" dir
+  while [ -h "$src" ]; do
+    dir="$(cd -P "$(dirname "$src")" && pwd)"
+    src="$(readlink "$src")"
+    [[ $src = /* ]] || src="$dir/$src"
+  done
   cd -P "$(dirname "$src")" && pwd
 }
 
@@ -328,11 +335,42 @@ cmd_uninstall() {
   printf 'Hooks removed. The %s directory was left in place.\n' "$GLOWBAR_DIR"
 }
 
+# ---- setup (one-shot: wire hooks + build app + turn on) -------------------
+# The whole install in one command: wire hooks into every ~/.claude* config dir,
+# build + stage the native app from the sources shipping beside this script, and
+# turn it on. This is what the curl installer and the Homebrew caveats both call,
+# so there's a single source of truth for the sequence. Re-runnable.
+cmd_setup() {
+  local src; src="$(script_dir)"
+
+  # 1. Wire hooks into every Claude config dir we can find.
+  local dirs=()
+  local d
+  for d in "$HOME"/.claude*; do [ -d "$d" ] && dirs+=(--config-dir "$d"); done
+  if [ ${#dirs[@]} -eq 0 ]; then cmd_install; else cmd_install "${dirs[@]}"; fi
+
+  # 2. Build + start the native app. Sources ship as a sibling of this script
+  #    (repo/app, or libexec/app under Homebrew). The control script is staged
+  #    into $BIN_DIR by cmd_install above; prefer the sibling if present.
+  local app_dir="$src/../app"
+  local app_ctl="$src/glowbar-app"
+  [ -x "$app_ctl" ] || app_ctl="$BIN_DIR/glowbar-app"
+  if [ -f "$app_dir/Package.swift" ] && [ -x "$app_ctl" ]; then
+    printf '\n'; "$app_ctl" build "$app_dir"
+    "$app_ctl" on || true
+  else
+    printf '\n%snote:%s app sources not found next to glowbar — build it yourself:\n' "$c_yellow" "$c_reset"
+    printf '  glowbar-app build /path/to/app && glowbar-app on\n'
+  fi
+}
+
 usage() {
   cat <<'EOF'
 glowbar — Touch Bar status lights for Claude Code
 
 USAGE:
+  glowbar setup                           one-shot: wire hooks (all ~/.claude*
+                                        dirs) + build the app + turn it on
   glowbar status                          show live session tiles
   glowbar sync                            import Claude's own live sessions (any
                                         session, even without hooks installed)
@@ -349,6 +387,7 @@ EOF
 main() {
   local cmd="${1:-status}"; shift || true
   case "$cmd" in
+    setup)     cmd_setup "$@" ;;
     status)    cmd_status "$@" ;;
     sync)      cmd_sync "$@" ;;
     reap)      cmd_reap "$@" ;;

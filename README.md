@@ -1,224 +1,199 @@
-# glowbar — Claude Code status lights on the MacBook Pro Touch Bar
+# 🔆 glowbar
 
-One coloured tile per Claude Code session, live on the Touch Bar (or the menu
-bar, or MTMR). Inspired by [cled](https://github.com/latent-spaces/cled), which
-does the same for RGB keyboards via OpenRGB — glowbar adapts the idea to the 2019
-MacBook Pro Touch Bar and drives it from **Claude Code hooks** instead of
-scraping terminals.
+**Your Claude Code sessions, glowing on the MacBook Pro Touch Bar.**
 
-```
-🔴 my-api    🟡 webapp    🟢 infra
- working      waiting      ready
-```
+![glowbar live on the Touch Bar](assets/keyled.png)
 
-| Colour | State    | Meaning                                                    |
-|--------|----------|------------------------------------------------------------|
-| 🔴 red    | working  | Claude is mid-turn (thinking, running tools, editing)      |
-| 🟡 yellow | waiting  | blocked on you (permission prompt / question)              |
-| 🟢 green  | ready    | turn finished, session idle                                |
-| ⚪ dim    | stale    | no activity for > 20 min (probably abandoned)              |
+One colored tile per session. A single glance tells you which Claude is heads-down,
+which is waiting on *you*, and which is already done — no more `Cmd-Tab`-ing through
+a stack of terminals to find the one that needs you.
 
-## Features
+| | Colour | Means |
+|--|--------|-------|
+| 🔴 | red | **working** — thinking, running tools, editing |
+| 🟡 | yellow | **waiting on you** — a permission prompt or a question |
+| 🟢 | green | **ready** — turn finished, idle |
+| ⚪ | dim | **stale** — quiet for 20+ min, probably abandoned |
 
-- **Live status at a glance** — Know the state of all Claude Code sessions without switching windows
-- **Multiple sessions** — Track 3+ projects simultaneously with color-coded tiles
-- **Smart state detection** — Automatically detects working/waiting/ready/stale states from hook events
-- **Touch Bar + Menu Bar** — Renders on Touch Bar (primary) with menu bar fallback for non-Touch-Bar Macs
-- **Session names** — Tiles show each session's name (honours `/rename`; otherwise Claude's derived name), so two sessions in the same repo stay distinct
-- **Catches every session** — `glowbar sync` also reads Claude's own live session files, so sessions started *before* you installed the hooks (or in a config dir without them) still show up (busy/waiting/idle → 🔴/🟡/🟢)
-- **Tap to focus** — Click a tile to jump to that session's terminal — Terminal/iTerm select the exact tab; VS Code, IntelliJ and other hosts focus the app window (found by walking the session's process tree). Crosses Spaces and fullscreen via the Accessibility API
-- **Zero overhead** — State stored in files (no daemon), hooks integrate with Claude Code's native event system
+▶️ **[Watch the 20-second demo](assets/demo.mp4)**
 
-## How it works
+> Inspired by [cled](https://github.com/latent-spaces/cled) (same idea for RGB
+> keyboards). glowbar drives it from **Claude Code hooks** — no terminal scraping,
+> no polling, no daemon.
 
-Two decoupled halves talking through a state directory — no sockets, no daemon:
+---
 
-```
-Claude Code session(s)                         renderer
-  │ hooks (glowbar-hook)                            │ reads
-  ▼                                               ▼
-~/.glowbar/sessions/<session_id>.json  ◄─────  glowbar status  (CLI)
-                                             MTMR widget    (Touch Bar, today)
-                                             glowbar-touchbar (native app)
-```
+## ⚡ Install — one command
 
-Each hook event maps to a state and the hook writes the session's JSON file
-atomically. The event → state mapping:
-
-| Hook event                              | Effect                                  |
-|-----------------------------------------|-----------------------------------------|
-| `SessionStart`                          | create file, `ready`                    |
-| `UserPromptSubmit`                      | `working`                               |
-| `PreToolUse` / `PostToolUse` / batch    | `working` + keep-alive                  |
-| `Notification` (`permission_prompt`, `elicitation_dialog`, `agent_needs_input`) | `waiting` |
-| `Notification` (`idle_prompt`)          | `ready`                                 |
-| `Notification` (other, e.g. `agent_completed`) | keep-alive only — never repaints  |
-| `Stop`                                  | `ready`                                 |
-| `SessionEnd`                            | delete file                             |
-
-The last row matters: a subagent finishing mid-turn fires `agent_completed`, and
-we deliberately *don't* let that flip a red (working) tile to yellow.
-
-## Quick start
+You'll need a Mac with a Touch Bar, [Claude Code](https://claude.com/claude-code),
+`jq`, and Xcode Command Line Tools (`xcode-select --install`).
 
 ```sh
-# 1. Wire the hooks into whichever Claude config dir(s) you use.
-./bin/glowbar install --config-dir ~/.claude-personal --config-dir ~/.claude-work
-
-# 2. In another terminal, watch live status:
-watch -n1 ./bin/glowbar status      # or: while true; do clear; ./bin/glowbar status; sleep 1; done
-
-# 3. Start Claude Code sessions in a few repos and watch the colours change.
+curl -fsSL https://raw.githubusercontent.com/vgudzhev/glowbar/main/install.sh | bash
 ```
 
-`install` backs up each `settings.json` first, is idempotent (safe to re-run),
-and copies `glowbar-hook` + `glowbar` into `~/.glowbar/bin`. Remove everything with:
+That clones glowbar to a temp dir, wires the hooks into **every** `~/.claude*`
+config dir it finds, builds + signs the Touch Bar app on *your* machine, turns it
+on, then deletes the clone. Re-runnable.
+
+Prefer to read before you pipe? Same thing, in two lines:
 
 ```sh
-./bin/glowbar uninstall --config-dir ~/.claude-personal --config-dir ~/.claude-work
+curl -fsSL https://raw.githubusercontent.com/vgudzhev/glowbar/main/install.sh -o glowbar-install.sh
+bash glowbar-install.sh
 ```
 
-`install`/`uninstall` default to `$CLAUDE_CONFIG_DIR` (or `~/.claude`) when you
-pass no `--config-dir`.
+**Homebrew?** Put the commands on your PATH, then one line finishes setup:
 
-### CLI
+```sh
+brew install vgudzhev/tools/glowbar
+glowbar setup      # wire hooks + build the app + turn it on
+```
+
+Start a Claude Code session — a tile appears. **That's it.** ✨
+
+<details>
+<summary><b>Or install by hand (three steps)</b></summary>
+
+```sh
+git clone https://github.com/vgudzhev/glowbar
+cd glowbar
+
+# 1. Wire glowbar into Claude Code (backs up your settings first, re-runnable)
+./bin/glowbar install --config-dir ~/.claude
+
+# 2. Build the Touch Bar app (one-time, ~2 min)
+./bin/glowbar-app build ./app
+
+# 3. Light it up
+./bin/glowbar-app on
+```
+
+> Using custom config dirs? Pass them (repeatably):
+> `--config-dir ~/.claude-personal --config-dir ~/.claude-work`.
+</details>
+
+> **Why not a `.dmg`?** glowbar is half CLI (hooks that merge into your
+> `settings.json`) and half app — a drag-to-Applications DMG can't do the hook
+> half. And building on your own Mac is what lets the app's Accessibility grant
+> stick. So a script that builds locally beats a prebuilt download here.
+
+**Make it one word** — drop this in your `~/.zshrc`:
+
+```sh
+export PATH="$HOME/.glowbar/bin:$PATH"
+alias gb='glowbar-app toggle'
+```
+
+Now **`gb`** flips glowbar on and off from anywhere.
+
+---
+
+## 🎯 Use it
+
+- **Tap a tile** → jump straight to that session's terminal — Terminal, iTerm, VS
+  Code, IntelliJ, whatever — even across a fullscreen Space. *(First tap asks for
+  Accessibility + Automation; allow once — see below.)*
+- **`gb`** → toggle the whole strip on/off.
+- **`glowbar status`** → the same tiles, right in your terminal.
+- **Same repo, two sessions?** Tiles show each session's name and honour `/rename`,
+  so they never look like twins.
+- **Started a session *before* installing?** It still shows up — `glowbar sync`
+  reads Claude's own live session list too.
+
+### 🔑 Permissions (for tap-to-focus)
+
+System Settings → Privacy & Security:
+
+- **Accessibility** — add **glowbar** (`~/.glowbar/glowbar.app`) and toggle it on.
+  Required to jump across fullscreen / Spaces.
+- **Automation** — no setup; macOS just prompts the first time you tap a Terminal
+  or iTerm tile. Click **Allow**.
+
+---
+
+## 🧠 How it works
 
 ```
-glowbar status      pretty-print the live session tiles (auto-runs sync)
+Claude Code sessions            glowbar
+   │ hooks write state             │ reads + renders
+   ▼                               ▼
+~/.glowbar/sessions/*.json  ◄──  Touch Bar · menu bar · glowbar status
+```
+
+Claude Code fires a hook on every event (start, prompt, tool use, notification,
+stop). A tiny script maps it to a state and writes the session's JSON file; the
+renderers just read it. No daemon, no scraping.
+
+The careful part is **refusing to lie**: a subagent finishing mid-turn, or a
+context compaction, must never flip a red "working" tile to green. Those are
+treated as keep-alive only.
+
+---
+
+## 🛠 More
+
+<details>
+<summary><b>Touch Bar layout & the menu-bar mirror</b></summary>
+
+By default glowbar takes over the Touch Bar's **app region** (replacing the focused
+app's own buttons). Prefer a compact dot in the Control Strip? `GLOWBAR_TOUCHBAR_MODE=strip glowbar-app on`.
+
+It also mirrors the tiles as coloured dots + names in the **menu bar** — the
+always-works fallback, and handy on Macs without a Touch Bar.
+</details>
+
+<details>
+<summary><b>No compiling: the MTMR widget</b></summary>
+
+Don't want to build the Swift app? A one-line [MTMR](https://github.com/Toxblh/MTMR)
+shell widget renders the same strip with zero compilation — see
+[`mtmr/README.md`](mtmr/README.md).
+</details>
+
+<details>
+<summary><b>CLI reference</b></summary>
+
+```
+glowbar setup       one-shot: wire hooks (all ~/.claude* dirs) + build + on
+glowbar status      live session tiles in the terminal (auto-syncs)
 glowbar sync        import Claude's own live sessions (works without hooks)
 glowbar install     wire hooks into settings.json (backs up, idempotent)
 glowbar uninstall   remove them again
-glowbar reap        delete session files for dead / expired sessions
-glowbar dir         print the state directory (~/.glowbar)
+glowbar reap        drop dead / expired session files
+glowbar dir         print the state dir (~/.glowbar)
+
+glowbar-app on|off|toggle|restart|status
+glowbar-app build ./app     build + sign the .app bundle
 ```
 
-## Renderers
+Uninstall everything: `./bin/glowbar uninstall --config-dir ~/.claude` then
+`rm -rf ~/.glowbar`.
+</details>
 
-### MTMR (Touch Bar, works today)
+<details>
+<summary><b>Tuning (environment variables)</b></summary>
 
-The fastest path to real Touch Bar tiles with zero compilation — see
-[`mtmr/README.md`](mtmr/README.md). A one-line shell widget renders the strip.
+| Variable | Default | Meaning |
+|----------|---------|---------|
+| `GLOWBAR_DIR` | `~/.glowbar` | state directory |
+| `GLOWBAR_STALE_SECS` | `1200` | inactivity → dim |
+| `GLOWBAR_HIDE_SECS` | `7200` | inactivity → hidden |
+| `GLOWBAR_TOUCHBAR_MODE` | `app` | `app` (takeover) or `strip` (control-strip dot) |
+</details>
 
-### Native app (`app/`)
-
-A SwiftPM menu-bar agent that draws a persistent Control-Strip item plus an
-expandable strip of named tiles, and mirrors them as coloured dots in the menu
-bar (the always-works fallback, useful on non-Touch-Bar Macs). Touch Bar access
-uses the same private `DFRFoundation` recipe as [Pock](https://github.com/pigigaldi/Pock)
-and MTMR, isolated in a small ObjC shim and guarded so it degrades to no-ops
-where those entry points are unavailable.
-
-```sh
-cd app
-swift build -c release       # needs a working Swift toolchain (see caveat)
-swift run glowbar-selftest     # verify the GlowbarCore logic (works under CLT-only)
-swift test                   # full XCTest suite (needs Xcode for XCTest)
-```
-
-#### Run it — one-word on/off
-
-`glowbar-app` builds and controls the running app. `glowbar install` stages it to
-`~/.glowbar/bin`; you can also run it straight from `./bin/glowbar-app`.
-
-```sh
-# one-time: build + assemble a signed glowbar.app at ~/.glowbar/glowbar.app
-./bin/glowbar-app build ./app
-
-# then control it with one word
-glowbar-app on                 # launch (Touch Bar tiles + menu-bar mirror)
-glowbar-app off                # stop
-glowbar-app toggle             # flip on/off
-glowbar-app status             # on / off
-glowbar-app restart
-```
-
-`build` assembles a minimal, ad-hoc-signed `.app` bundle (stable bundle id
-`com.glowbar.touchbar`). The signature matters: a bare `swift build` binary has no
-stable TCC identity, so macOS won't reliably honour its Accessibility grant —
-the bundle fixes that, and the grant then persists across rebuilds.
-
-By default it takes over the Touch Bar's **app region** (replacing the focused
-app's own bar). For a compact dot in the **Control Strip** (right, by brightness)
-instead, set the mode:
-
-```sh
-GLOWBAR_TOUCHBAR_MODE=strip glowbar-app on
-```
-
-#### Permissions (for tap-to-focus)
-
-Tap-to-focus asks macOS to bring another app's window forward, which needs:
-
-- **Accessibility** — required to cross Spaces / fullscreen (the `AXRaise`).
-  System Settings → Privacy & Security → **Accessibility** → enable **glowbar**.
-- **Automation** — only for selecting the exact Terminal/iTerm tab; prompted on
-  first tap. (VS Code / IntelliJ focus needs just Accessibility.)
-
-#### Add to `~/.zshrc`
-
-Put `~/.glowbar/bin` on your `PATH` and alias the toggle, so you can flip it from
-anywhere by typing `tb`:
-
-```sh
-# glowbar — Touch Bar status lights
-export PATH="$HOME/.glowbar/bin:$PATH"
-alias tb='glowbar-app toggle'
-```
-
-Reload with `source ~/.zshrc` (or open a new terminal), then just type **`tb`**.
-For a global hotkey, add a *Run Shell Script* action running
-`$HOME/.glowbar/bin/glowbar-app toggle` in **Shortcuts.app** and assign it a key.
-
-Auto-start on login via `packaging/com.glowbar.app.plist` (a LaunchAgent template).
-
-## Configuration
-
-Thresholds are environment-overridable (read by the CLI and MTMR widget):
-
-| Variable            | Default | Meaning                         |
-|---------------------|---------|---------------------------------|
-| `GLOWBAR_DIR`         | `~/.glowbar` | state directory               |
-| `GLOWBAR_STALE_SECS`  | `1200`  | inactivity → dim/stale          |
-| `GLOWBAR_HIDE_SECS`   | `7200`  | inactivity → hidden / reaped    |
-
-## Verification status (what's actually been tested)
-
-Being precise about this, because parts run on hardware I can drive and parts
-don't:
-
-- **Pipeline (`bin/glowbar-hook`, `bin/glowbar`) — verified.** The full state
-  machine was exercised with real hook payloads (ready→working→waiting→ready,
-  the `agent_completed`-stays-working rule, dedup, stale/dead detection, reap,
-  and idempotent install/uninstall that preserves existing hooks). A **real
-  headless Claude Code session** confirmed the two things simulation can't: the
-  installed (argv-less) hook receives the event via **stdin** and writes the
-  correct state, and the recorded PID is the **durable Claude Code process**
-  (so `kill -0` liveness is reliable, not a transient shell). The working/waiting
-  *colour* transitions were later confirmed **live**, against a real interactive
-  session running with the hooks installed. Requires **bash 3.2+** and `jq`
-  (both stock on macOS).
-
-- **MTMR widget — verified logic, needs your Touch Bar to see.** The renderer
-  was tested against fixture state (colours, truncation, empty `💤` case). The
-  actual Touch Bar display depends on your MTMR install.
-
-- **Native app — compiles and its logic is tested; Touch Bar rendering not yet
-  verified.** The whole package **builds cleanly** (`swift build` → a linked
-  `glowbar-touchbar` binary; the ObjC DFR shim compiles and links). `GlowbarCore`
-  (parsing / stale / PID / dedup — the bug-prone part) passes **12/12 checks**
-  via `swift run glowbar-selftest`, an XCTest-free runner that works under Command
-  Line Tools alone. (The XCTest suite in `Tests/` needs full Xcode.) What is
-  *not* yet verified is the actual on-screen rendering: the menu-bar mirror and
-  the private-API Touch Bar path have not been observed running on this macOS
-  version — the private entry points are faithful to Pock/MTMR and guarded to
-  degrade to no-ops, with the menu-bar mirror as the fallback.
-
-## Layout
+<details>
+<summary><b>Layout</b></summary>
 
 ```
-bin/glowbar-hook        hook handler (one script, all events; atomic writes)
-bin/glowbar             CLI: status / install / uninstall / reap / dir
-mtmr/glowbar-strip.sh   MTMR Touch Bar widget (+ mtmr/README.md)
-app/                  native SwiftPM Touch Bar app (GlowbarCore + CDFR shim)
-packaging/            LaunchAgent template
+bin/glowbar        CLI: status / sync / install / uninstall / reap
+bin/glowbar-hook   the hook handler (one script, all events)
+bin/glowbar-app    build + on/off control for the native app
+mtmr/              MTMR Touch Bar widget (no build)
+app/               native SwiftPM app (GlowbarCore + CDFR shim)
 ```
+</details>
+
+---
+
+*Built for the Touch Bar Apple abandoned and I apparently never will.*
